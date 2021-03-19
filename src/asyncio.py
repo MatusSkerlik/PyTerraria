@@ -6,7 +6,7 @@ from functools import partial
 
 import pygame
 
-fps = 70
+fps = 60
 _loop = asyncio.get_event_loop()
 _pool0 = []
 

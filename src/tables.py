@@ -1,17 +1,11 @@
-from enum import IntEnum, Enum
+from enum import IntEnum
+
+
+class Backgrounds(IntEnum):
+    DEFAULT = 0
 
 
 class Tiles(IntEnum):
-    MASK8 = -9
-    MASK7 = -8
-    MASK6 = -7
-    MASK5 = -6
-    MASK4 = -5
-    MASK3 = -4
-    MASK2 = -3
-    MASK1 = -2
-    MASK0 = -1
-
     NONE = 0
     DIRT = 1
     STONE = 2
@@ -20,6 +14,7 @@ class Tiles(IntEnum):
     GOLD = 8
     SILVER = 9
     ASH = 57
+    WHITE_TORCH = 65
 
     B_OAK_LOG = 100
     B_DIRT = 200
@@ -28,6 +23,7 @@ class Items(IntEnum):
     IRON_PICKAXE = 1001
     IRON_HAMMER = 1003
     IRON_AXE = 1002
+
 
 def is_tile(item: int):
     try:

@@ -46,7 +46,7 @@ class Application:
         await tick()
         while self._running:
             delta_time = await tick()
-            self._current_scene.get_input().handle_events(pygame.event.get())
+            self._current_scene.get_input().handle_events(pygame.event.get(pump=True))
             self._current_scene.update(delta_time)
             self._renderer.update(delta_time)
             self._renderer.render(delta_time)

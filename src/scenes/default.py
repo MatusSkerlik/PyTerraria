@@ -18,8 +18,8 @@ class DefaultScene(MouseListener, KeyboardListener, World):
         super().__init__(0, 0, 0, 0)
         self.keys_down = {}
         self.settings = SceneSettings({
-            "WORLD_WIDTH": 200,
-            "WORLD_HEIGHT": 200,
+            "WORLD_WIDTH": 500,
+            "WORLD_HEIGHT": 500,
             "TILE_WIDTH": 16,
             "TILE_HEIGHT": 16,
             "CHUNK_HEIGHT": 8,
@@ -36,6 +36,7 @@ class DefaultScene(MouseListener, KeyboardListener, World):
         self.inventory.add(Items.IRON_PICKAXE, 1)
         self.inventory.add(Items.IRON_AXE, 1)
         self.inventory.add(Items.IRON_HAMMER, 1)
+        self.inventory.add(Tiles.WHITE_TORCH, 20)
         self.player = Player(0, 0, 20, 42)
 
     def get_tiles_around(self, rect, delta_time: float) -> List[Rect]:
@@ -180,10 +181,16 @@ class DefaultScene(MouseListener, KeyboardListener, World):
                         self.map.foreground.set_tile(c, r, 0)
                         return True
                 elif slot.type == Items.IRON_HAMMER:  # mining background
-                    tile = self.map.background.get_tile(c, r)
+                    tile = self.map.background0.get_tile(c, r)
                     if tile and tile.type != Tiles.NONE:
                         self.inventory.add(tile.type, 1)
-                        self.map.background.set_tile(c, r, 0)
+                        self.map.background0.set_tile(c, r, 0)
+                        return True
+                elif slot.type == Tiles.WHITE_TORCH:
+                    tile = self.map.background1.get_tile(c, r)
+                    if tile and tile.type == Tiles.NONE:
+                        self.inventory.consume(slot.type, 1)
+                        self.map.background1.set_tile(c, r, slot.type)
                         return True
                 else:  # building
 
@@ -201,14 +208,14 @@ class DefaultScene(MouseListener, KeyboardListener, World):
                                 self.map.foreground.set_tile(c, r, build_item_type)
                                 return True
                         else:
-                            tile = self.map.background.get_tile(c, r)
+                            tile = self.map.background0.get_tile(c, r)
                             if tile:
                                 slot.amount -= 1
                                 if slot.amount <= 0:
                                     slot.clear()
                                 if tile.type != Tiles.NONE:
                                     self.inventory.add(tile.type, 1)
-                                self.map.background.set_tile(c, r, build_item_type)
+                                self.map.background0.set_tile(c, r, build_item_type)
                                 return True
             return False
 

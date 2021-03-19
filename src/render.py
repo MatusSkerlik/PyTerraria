@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Tuple, Union, Dict
 
 import pygame
-from pygame import Surface, Color, SRCALPHA, BLEND_RGBA_MIN, BLEND_RGBA_SUB
+from pygame import Surface, Color, SRCALPHA, BLEND_RGBA_MIN
 
 from src.actor import ActorState
 from src.asyncio import run_coroutine
@@ -11,7 +11,7 @@ from src.map import GridListener, GridType, Tile
 from src.rect import Rect
 from src.scene import SceneListener
 from src.settings import ApplicationSettings
-from src.tables import Actors, Tiles, Items, is_tile, is_item
+from src.tables import Actors, Tiles, Items, Backgrounds
 from src.vector import Vector
 
 # tile states with corresponding areas
@@ -120,9 +120,13 @@ _tree_state_areas = {
     8: [(110, 66, 20, 20), (110, 88, 20, 20), (110, 110, 20, 20)],  # leaf root
 }
 
-_tree_top_areas = {0: [(0, 0, 80, 80), (82, 0, 80, 80), (164, 0, 80, 80)]}
+_torch_areas = {
+    0: [(4, 0, 16, 20)],
+    1: [(22, 0, 20, 20)],
+    2: [(44, 0, 20, 20)]
+}
 
-_mask_areas = {0: [(0, 0, 16, 16)]}
+_tree_top_areas = {0: [(0, 0, 80, 80), (82, 0, 80, 80), (164, 0, 80, 80)]}
 
 _actor_areas = {
     0: [(0, 0, 40, 56)],  # idle
@@ -136,16 +140,6 @@ _actor_areas = {
 _tileset_table = {
 
     # id, #filename, #diffusion tile, sprite_type, #areas dict
-    Tiles.MASK8: ("Mask8", 0, 3, _mask_areas),
-    Tiles.MASK7: ("Mask7", 0, 3, _mask_areas),
-    Tiles.MASK6: ("Mask6", 0, 3, _mask_areas),
-    Tiles.MASK5: ("Mask5", 0, 3, _mask_areas),
-    Tiles.MASK4: ("Mask4", 0, 3, _mask_areas),
-    Tiles.MASK3: ("Mask3", 0, 3, _mask_areas),
-    Tiles.MASK2: ("Mask2", 0, 3, _mask_areas),
-    Tiles.MASK1: ("Mask1", 0, 3, _mask_areas),
-    Tiles.MASK0: ("Mask0", 0, 3, _mask_areas),
-
     Tiles.NONE: ("Tiles_00", 0, 0, _tile_state_areas),  # NONE / light
     Tiles.DIRT: ("Tiles_0", 1, 0, _tile_state_areas),  # dirt
     Tiles.STONE: ("Tiles_1", 1, 0, _tile_state_areas),  # stone
@@ -154,6 +148,7 @@ _tileset_table = {
     Tiles.GOLD: ("Tiles_8", 1, 0, _tile_state_areas),  # gold
     Tiles.SILVER: ("Tiles_9", 1, 0, _tile_state_areas),  # silver
     Tiles.ASH: ("Tiles_57", 2, 0, _tile_state_areas),  # ash
+    Tiles.WHITE_TORCH: ("Tiles_4", 0, 2, _torch_areas),  # torch
 
     100: ("Tiles_5", 0, 1, _tree_state_areas),  # tree log
     105: ("Tree_Tops", 0, 5, _tree_top_areas),  # tree top
@@ -179,16 +174,16 @@ _itemset_table = {
     Items.IRON_AXE: ("Item_10", [0, 0, 32, 32]),
     Items.IRON_HAMMER: ("Item_7", [0, 0, 32, 32]),
     Tiles.B_OAK_LOG: ("Item_9", [0, 0, 22, 24]),
-    Tiles.B_DIRT: ("Item_30", [0, 0, 16, 16])
+    Tiles.B_DIRT: ("Item_30", [0, 0, 16, 16]),
+    Tiles.WHITE_TORCH: ("Item_8", [0, 0, 16, 16])
+}
+
+_background_table = {
+    Backgrounds.DEFAULT: ("Forest_background_2", [0, 0, 1024, 838])
 }
 
 # blit surfaces for each tile state ( lazy )
 _tile_sprites = {
-
-}
-
-# blit surfaces for each mask state ( lazy )
-_mask_sprites = {
 
 }
 
@@ -198,6 +193,10 @@ _actor_sprites = {
 }
 
 _item_sprites = {
+
+}
+
+_background_sprites = {
 
 }
 
@@ -262,6 +261,49 @@ def create_sprites_for_items(camera, item_type: int):
 def chunk_key(chunk_col: int, chunk_row: int):
     """ :return: index for chunk col, row """
     return "col{}, row{}".format(chunk_col, chunk_row)
+
+
+def horizontal_vertical(size, vertical_start, vertical_end, horizontal_start, horizontal_end, max_depth):
+    surf_v = pygame.Surface((1, max_depth), pygame.SRCALPHA, 32)
+    surf_h = pygame.Surface((max_depth, 1), pygame.SRCALPHA, 32)
+
+    dd = 1.0 / max_depth
+    vsr, vsg, vsb, vsa = vertical_start
+    ver, veg, veb, vea = vertical_end
+    vrm = (ver - vsr) * dd
+    vgm = (veg - vsg) * dd
+    vbm = (veb - vsb) * dd
+    vam = (vea - vsa) * dd
+
+    hsr, hsg, hsb, hsa = horizontal_start
+    her, heg, heb, hea = horizontal_end
+    hrm = (her - hsr) * dd
+    hgm = (heg - hsg) * dd
+    hbm = (heb - hsb) * dd
+    ham = (hea - hsa) * dd
+
+    for x in range(max_depth):
+        surf_h.set_at((x, 0),
+                      (
+                          int(hsr + hrm * x),
+                          int(hsg + hgm * x),
+                          int(hsb + hbm * x),
+                          int(hsa + ham * x)
+                      ))
+    surf_h = pygame.transform.scale(surf_h, size)
+
+    for y in range(max_depth):
+        surf_v.set_at((0, y),
+                      (
+                          int(vsr + vrm * y),
+                          int(vsg + vgm * y),
+                          int(vsb + vbm * y),
+                          int(vsa + vam * y)
+                      ))
+    surf_v = pygame.transform.scale(surf_v, size)
+
+    surf_h.blit(surf_v, (0, 0, size[0], size[1]))
+    return surf_h
 
 
 class TextureFactory:
@@ -443,6 +485,12 @@ class Sprite:
             w = clip.get_width()
             h = clip.get_height()
             self.clips[i] = pygame.transform.smoothscale(clip, (int(w * factor), int(h * factor)))
+        self.clip = self.clips[self.i]
+
+    def resize(self, width: int, height: int):
+        for i in range(self.len):
+            clip = self.clips[i]
+            self.clips[i] = pygame.transform.smoothscale(clip, (width, height))
         self.clip = self.clips[self.i]
 
     def transform(self, width: int, height: int):
@@ -754,34 +802,6 @@ class BackgroundSpriteResolver:
         self.tile = tile
 
     def get_state(self):
-
-        def is_none(tile: Tile):
-            return (tile is None) or (tile.type == Tiles.NONE)
-
-        def none_count(nbs):
-            none = 0
-            for n in nbs:
-                if is_none(n):
-                    none += 1
-            return none
-
-        col = self.tile.col
-        row = self.tile.row
-        top, down, left, right = self.map.get_nbs(col, row)
-        none = none_count(self.map.get_nbs(col, row))
-
-        # if none == 4:
-        #     return 1
-        # elif none == 3:
-        #     if is_none(top):
-        #         return 4
-        #     elif is_none(down):
-        #         return 5
-        #     elif is_none(left):
-        #         return 2
-        #     else:
-        #         return 3
-        # else:
         return 0
 
     def get_surface(self):
@@ -793,11 +813,24 @@ class LightMaskSpriteResolver:
         self.map = map_
         self.tile = tile
 
-    def get_state(self):
-        return 0
-
     def get_surface(self):
-        return get_tile_sprite(self.tile.type, self.get_state()).get_surface()
+        col = self.tile.col
+        row = self.tile.row
+        top, down, left, right = self.map.get_nbs(col, row)
+
+        if self.tile.type != 0:
+            t_v = abs(top.type) if top else 0
+            d_v = abs(down.type) if down else 0
+            l_v = abs(left.type) if left else 0
+            r_v = abs(right.type) if right else 0
+            return horizontal_vertical((16, 16),
+                                       (0, 0, 0, t_v / 15 * 255),
+                                       (0, 0, 0, d_v / 15 * 255),
+                                       (0, 0, 0, l_v / 15 * 255),
+                                       (0, 0, 0, r_v / 15 * 255),
+                                       2)
+        else:
+            return get_tile_sprite(0, 0).get_surface()
 
 
 class PygameRenderer:
@@ -875,15 +908,18 @@ class PygameRenderer:
 
                 for col in range(self.tiles_x):
                     for row in range(self.tiles_y):
-                        tile = self.get_tile(col, row, GridType.BACKGROUND)
-                        if tile:
-                            self.blit_tile(tile, GridType.BACKGROUND)
+                        tile = self.get_tile(col, row, GridType.BACKGROUND0)
+                        if tile and tile.type != Tiles.NONE:
+                            self.blit_tile(tile, GridType.BACKGROUND0)
+                        tile = self.get_tile(col, row, GridType.BACKGROUND1)
+                        if tile and tile.type != Tiles.NONE:
+                            self.blit_tile(tile, GridType.BACKGROUND1)
                         tile = self.get_tile(col, row, GridType.FOREGROUND)
-                        if tile:
+                        if tile and tile.type != Tiles.NONE:
                             self.blit_tile(tile, GridType.FOREGROUND)
                         if self.lighting:
                             tile = self.get_tile(col, row, GridType.LIGHTING)
-                            if tile:
+                            if tile and tile.type != Tiles.NONE:
                                 self.blit_tile(tile, GridType.LIGHTING)
 
             def get_tile(self, col: int, row: int, grid_type: GridType):
@@ -891,8 +927,10 @@ class PygameRenderer:
                 tile_col = col + self.col * self.tiles_x
                 tile_row = row + self.row * self.tiles_y
 
-                if grid_type == GridType.BACKGROUND:
-                    return self.map.background.get_tile(tile_col, tile_row)
+                if grid_type == GridType.BACKGROUND0:
+                    return self.map.background0.get_tile(tile_col, tile_row)
+                elif grid_type == GridType.BACKGROUND1:
+                    return self.map.background1.get_tile(tile_col, tile_row)
                 elif grid_type == GridType.FOREGROUND:
                     return self.map.foreground.get_tile(tile_col, tile_row)
                 elif grid_type == GridType.LIGHTING:
@@ -904,30 +942,34 @@ class PygameRenderer:
                 """ Blit tile sprite into chunk surface """
 
                 maps = {
-                    GridType.BACKGROUND: self.map.background,
+                    GridType.BACKGROUND0: self.map.background0,
+                    GridType.BACKGROUND1: self.map.background1,
                     GridType.FOREGROUND: self.map.foreground,
                     GridType.LIGHTING: self.map.lighting
                 }
 
-                filename, diffusion_type, sprite_type, areas = _tileset_table[tile.type]
-                if sprite_type == 0:
-                    sprite = TileSpriteResolver(maps[grid_type], tile)
-                elif sprite_type == 1:
-                    sprite = TreeSpriteResolver(maps[grid_type], tile)
-                elif sprite_type == 2:
-                    sprite = BackgroundSpriteResolver(maps[grid_type], tile)
-                elif sprite_type == 3:
-                    sprite = LightMaskSpriteResolver(maps[grid_type], tile)
-                elif sprite_type == 5:
-                    sprite = TreeTopSpriteResolver(maps[grid_type], tile)
+                if grid_type != GridType.LIGHTING:
+                    filename, diffusion_type, sprite_type, areas = _tileset_table[tile.type]
+                    if sprite_type == 0:
+                        sprite = TileSpriteResolver(maps[grid_type], tile)
+                    elif sprite_type == 1:
+                        sprite = TreeSpriteResolver(maps[grid_type], tile)
+                    elif sprite_type == 2:
+                        sprite = BackgroundSpriteResolver(maps[grid_type], tile)
+                    # elif sprite_type == 3:
+                    #     sprite = LightMaskSpriteResolver(maps[grid_type], tile)
+                    elif sprite_type == 5:
+                        sprite = TreeTopSpriteResolver(maps[grid_type], tile)
+                    else:
+                        raise AttributeError
                 else:
-                    raise AttributeError
+                    sprite = LightMaskSpriteResolver(maps[grid_type], tile)
 
                 # translate map col - row to chunk col - row
                 col = tile.col % self.tiles_x
                 row = tile.row % self.tiles_y
-                x = col * self.tile_width + (self.tile_width / 2 if grid_type != GridType.BACKGROUND else 0)
-                y = row * self.tile_height + (self.tile_height / 2 if grid_type != GridType.BACKGROUND else 0)
+                x = col * self.tile_width + (self.tile_width / 2 if grid_type != GridType.BACKGROUND0 else 0)
+                y = row * self.tile_height + (self.tile_height / 2 if grid_type != GridType.BACKGROUND0 else 0)
 
                 self.surface.blit(sprite.get_surface(), (x, y))
 
@@ -939,18 +981,23 @@ class PygameRenderer:
                 self.surface.blit(surface, (x, y), special_flags=BLEND_RGBA_MIN)
 
             def update_tile(self, col: int, row: int):
-
                 col = col % self.tiles_x
                 row = row % self.tiles_y
 
                 self.blit_empty(col, row)
-                tile = self.get_tile(col, row, GridType.BACKGROUND)
-                self.blit_tile(tile, GridType.BACKGROUND)
+                tile = self.get_tile(col, row, GridType.BACKGROUND0)
+                if tile and tile.type != Tiles.NONE:
+                    self.blit_tile(tile, GridType.BACKGROUND0)
+                tile = self.get_tile(col, row, GridType.BACKGROUND1)
+                if tile and tile.type != Tiles.NONE:
+                    self.blit_tile(tile, GridType.BACKGROUND1)
                 tile = self.get_tile(col, row, GridType.FOREGROUND)
-                self.blit_tile(tile, GridType.FOREGROUND)
+                if tile and tile.type != Tiles.NONE:
+                    self.blit_tile(tile, GridType.FOREGROUND)
                 if self.lighting:
                     tile = self.get_tile(col, row, GridType.LIGHTING)
-                    self.blit_tile(tile, GridType.LIGHTING)
+                    if tile and tile.type != Tiles.NONE:
+                        self.blit_tile(tile, GridType.LIGHTING)
 
             def update(self, delta_time: float):
                 if not self.initialized and not self.initializing:
@@ -1032,8 +1079,8 @@ class PygameRenderer:
 
                 lc, lr = tile.col, tile.row
                 min_d = {}
-                for c in range(tile.col - 9, tile.col + 10):
-                    for r in range(tile.row - 9, tile.row + 10):
+                for c in range(tile.col - 14, tile.col + 16):
+                    for r in range(tile.row - 14, tile.row + 16):
                         dx = lc - c if lc > c else c - lc
                         dy = lr - r if lr > r else r - lr
                         d = dx + dy
@@ -1042,7 +1089,7 @@ class PygameRenderer:
                 for tc, tr in min_d.keys():
                     d = min_d.get((tc, tr))
                     t = self.map.lighting.get_tile(tc, tr)
-                    if t and d < abs(t.type):
+                    if t and d <= abs(t.type):
                         self.map.lighting.set_tile(tc, tr, -d)
                         redraw.add((tc, tr))
 
@@ -1050,13 +1097,13 @@ class PygameRenderer:
 
                 lc, lr = tile.col, tile.row
                 max_d = {}
-                for c in range(tile.col - 9, tile.col + 10):
-                    for r in range(tile.row - 9, tile.row + 10):
+                for c in range(tile.col - 14, tile.col + 16):
+                    for r in range(tile.row - 14, tile.row + 16):
                         dx = lc - c if lc > c else c - lc
                         dy = lr - r if lr > r else r - lr
                         d = dx + dy
 
-                        if d < 10:
+                        if d < 16:
                             max_d[(c, r)] = d
 
                 lights = set()
@@ -1068,7 +1115,7 @@ class PygameRenderer:
                         if d > abs(t.type):
                             lights.add((tc, tr, abs(t.type)))
                         else:
-                            self.map.lighting.set_tile(tc, tr, -9)
+                            self.map.lighting.set_tile(tc, tr, -14)
                             redraw.add((tc, tr))
                             masks.add((tc, tr))
 
@@ -1078,7 +1125,7 @@ class PygameRenderer:
                         dx = lc - c if lc > c else c - lc
                         dy = lr - r if lr > r else r - lr
                         d = dx + dy
-                        if dp + d < 10:
+                        if dp + d < 16:
                             m_d = min_d.get((c, r))
                             if m_d is None:
                                 min_d[(c, r)] = dp + d
@@ -1088,7 +1135,7 @@ class PygameRenderer:
                 for tc, tr in min_d.keys():
                     d = min_d[(tc, tr)]
                     t = self.map.lighting.get_tile(tc, tr)
-                    if t and d < abs(t.type):
+                    if t and d <= abs(t.type):
                         self.map.lighting.set_tile(tc, tr, -d)
                         redraw.add((tc, tr))
 
@@ -1115,8 +1162,8 @@ class PygameRenderer:
                 chunk = self.get_tile_chunk(col, row)
                 chunk.update_tile(col, row)
 
-            b_tile = self.map.background.get_tile(c, r)
-            if self.lighting_enabled and (b_tile.type == Tiles.NONE or grid_id == GridType.BACKGROUND):
+            b_tile = self.map.background0.get_tile(c, r)
+            if self.lighting_enabled and (b_tile.type == Tiles.NONE or grid_id == GridType.BACKGROUND0):
                 run_coroutine(
                     coroutine=self.update_light(tile),
                     on_success=None,

@@ -259,9 +259,9 @@ class ProceduralMap(Map):
             for i in range(shape[0]):
                 for j in range(shape[1]):
                     if foreground[j, i] == 0 and background[j, i] == 0:
-                        light[i, j] = Tiles.NONE
+                        light[i, j] = 0
                     else:
-                        light[i, j] = Tiles.MASK8
+                        light[i, j] = -depth - 1
 
             queue = set()
             for i in range(shape[0]):
@@ -333,9 +333,10 @@ class ProceduralMap(Map):
         #         if i - min_i == int(surface[j] * min_i) and j % random.randint(30, 50) == 0:
         #             tree(i, j, background)  # tree
 
-        self.background.tiles = background.astype(np.uint8).T
+        self.background0.tiles = background.astype(np.uint8).T
+        self.background1.tiles = np.zeros(shape).astype(np.uint8).T
         self.foreground.tiles = map_tiles(surface, caves, filling, copper, iron, silver, gold).astype(np.uint8).T
-        self.lighting.tiles = lighting(self.background.tiles, self.foreground.tiles, 8)
+        self.lighting.tiles = lighting(self.background0.tiles, self.foreground.tiles, 14)
 
     def exit(self) -> None:
         pass
