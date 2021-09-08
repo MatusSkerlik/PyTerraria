@@ -1,7 +1,6 @@
-import random
-
 import noise
 import numpy as np
+import random
 
 from src.map import Map
 from src.tables import Tiles
@@ -333,10 +332,10 @@ class ProceduralMap(Map):
         #         if i - min_i == int(surface[j] * min_i) and j % random.randint(30, 50) == 0:
         #             tree(i, j, background)  # tree
 
-        self.background0.tiles = background.astype(np.uint8).T
-        self.background1.tiles = np.zeros(shape).astype(np.uint8).T
+        self.background.tiles = background.astype(np.uint8).T
+        self.furniture.tiles = np.zeros(shape).astype(np.uint8).T
         self.foreground.tiles = map_tiles(surface, caves, filling, copper, iron, silver, gold).astype(np.uint8).T
-        self.lighting.tiles = lighting(self.background0.tiles, self.foreground.tiles, 14)
+        self.lighting.tiles = lighting(self.background.tiles, self.foreground.tiles, 14)
 
     def exit(self) -> None:
         pass

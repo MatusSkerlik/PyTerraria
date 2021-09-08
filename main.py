@@ -1,5 +1,4 @@
 from src.application import Application
-from src.asyncio import run_async
 from src.scenes.default import DefaultScene
 
 
@@ -7,7 +6,7 @@ def run():
     application = Application()
     application.init()
     application.set_scene(DefaultScene())
-    run_async(application.loop())
+    application.loop()
     application.quit()
 
 

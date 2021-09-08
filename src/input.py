@@ -1,9 +1,8 @@
+import pygame
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Set, Tuple
-
-import pygame
 from pygame.event import Event
+from typing import Set, Tuple
 
 
 class Key(IntEnum):
@@ -12,6 +11,7 @@ class Key(IntEnum):
     A = 2
     D = 3
     ESC = 80
+    SPACE = 81
 
 
 _key_translation_table = {
@@ -19,7 +19,8 @@ _key_translation_table = {
     pygame.K_s: Key.S,
     pygame.K_a: Key.A,
     pygame.K_d: Key.D,
-    pygame.K_ESCAPE: Key.ESC
+    pygame.K_ESCAPE: Key.ESC,
+    pygame.K_SPACE: Key.SPACE
 }
 
 
@@ -143,13 +144,11 @@ class Input:
                             break
                     except KeyError:
                         pass
-            # TODO drag
-            # elif self._mouse_down:
-            #     for listener in self._mouse_listeners:
-            #         try:
-            #             key = _mouse_translation_table[ev.button]
-            #             x, y = pygame.mouse.get_pos()
-            #             if listener.on_mouse_drag(x, y, key):
-            #                 break
-            #         except KeyError:
-            #             pass
+            elif self._mouse_down:
+                for listener in self._mouse_listeners:
+                    try:
+                        x, y = pygame.mouse.get_pos()
+                        if listener.on_mouse_drag(x, y, Mouse.LEFT):
+                            break
+                    except KeyError:
+                        pass

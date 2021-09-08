@@ -11,12 +11,12 @@ class GeneratorScene(KeyboardListener, World):
         super().__init__(0, 0, 0, 0)
         self.keys_down = {}
         self.settings = SceneSettings({
-            "WORLD_WIDTH": 1500,
+            "WORLD_WIDTH": 500,
             "WORLD_HEIGHT": 500,
             "TILE_WIDTH": 4,
             "TILE_HEIGHT": 4,
-            "CHUNK_HEIGHT": 48,
-            "CHUNK_WIDTH": 48,
+            "CHUNK_HEIGHT": 32,
+            "CHUNK_WIDTH": 32,
             "LIGHTING": False
         })
         self.input = Input()

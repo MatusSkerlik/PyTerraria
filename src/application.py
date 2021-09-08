@@ -1,12 +1,12 @@
+import pygame
 from typing import Union
 
-import pygame
-
-from src.asyncio import tick
+from src.parellel import tick
 from src.render import PygameRenderer
 from src.scene import Scene
 from src.settings import ApplicationSettings
 
+FPS = 60
 
 class LogicError(Exception):
     pass
@@ -23,29 +23,32 @@ class Application:
         self._initialized = False
         self._running = False
         self._current_scene = None
+        self._clock = None
 
     def init(self):
         if self._initialized:
             raise LogicError("Game already initialized")
         else:
             self._settings = ApplicationSettings({
-                "WIDTH": 1900,
-                "HEIGHT": 1000
+                "WIDTH": 1080,
+                "HEIGHT": 768
             })
             self._renderer = PygameRenderer(self._settings)
             self._renderer.init()
-
             self._initialized = True
+            self._clock = pygame.time.Clock()
 
-    async def loop(self):
+    def loop(self):
         if not self._initialized:
             raise LogicError("You must first initialize app")
 
         self._running = self._current_scene is not None
 
-        await tick()
+        self._clock.tick()
         while self._running:
-            delta_time = await tick()
+            delta_time = self._clock.tick(FPS) / 1000
+            tick(FPS)
+            # print(self._clock.get_fps())
             self._current_scene.get_input().handle_events(pygame.event.get(pump=True))
             self._current_scene.update(delta_time)
             self._renderer.update(delta_time)

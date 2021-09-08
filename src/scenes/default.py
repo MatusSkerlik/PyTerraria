@@ -22,8 +22,8 @@ class DefaultScene(MouseListener, KeyboardListener, World):
             "WORLD_HEIGHT": 500,
             "TILE_WIDTH": 16,
             "TILE_HEIGHT": 16,
-            "CHUNK_HEIGHT": 8,
-            "CHUNK_WIDTH": 8,
+            "CHUNK_HEIGHT": 12,
+            "CHUNK_WIDTH": 12,
             "LIGHTING": True
         })
         self.input = Input()
@@ -36,7 +36,7 @@ class DefaultScene(MouseListener, KeyboardListener, World):
         self.inventory.add(Items.IRON_PICKAXE, 1)
         self.inventory.add(Items.IRON_AXE, 1)
         self.inventory.add(Items.IRON_HAMMER, 1)
-        self.inventory.add(Tiles.WHITE_TORCH, 20)
+        self.inventory.add(Tiles.WHITE_TORCH, 999)
         self.player = Player(0, 0, 20, 42)
 
     def get_tiles_around(self, rect, delta_time: float) -> List[Rect]:
@@ -180,17 +180,28 @@ class DefaultScene(MouseListener, KeyboardListener, World):
                         self.inventory.add(tile.type, 1)
                         self.map.foreground.set_tile(c, r, 0)
                         return True
-                elif slot.type == Items.IRON_HAMMER:  # mining background
-                    tile = self.map.background0.get_tile(c, r)
+                    tile = self.map.furniture.get_tile(c, r)
                     if tile and tile.type != Tiles.NONE:
                         self.inventory.add(tile.type, 1)
-                        self.map.background0.set_tile(c, r, 0)
+                        self.map.furniture.set_tile(c, r, 0)
+                        return True
+                elif slot.type == Items.IRON_HAMMER:  # mining background
+                    tile = self.map.background.get_tile(c, r)
+                    fg_tile = self.map.foreground.get_tile(c, r)
+                    f_tile = self.map.furniture.get_tile(c, r)
+                    if tile and tile.type != Tiles.NONE and \
+                            fg_tile and fg_tile.type == Tiles.NONE and \
+                            f_tile and f_tile.type == Tiles.NONE:
+                        self.inventory.add(tile.type, 1)
+                        self.map.background.set_tile(c, r, 0)
                         return True
                 elif slot.type == Tiles.WHITE_TORCH:
-                    tile = self.map.background1.get_tile(c, r)
-                    if tile and tile.type == Tiles.NONE:
+                    tile = self.map.furniture.get_tile(c, r)
+                    b_tile = self.map.background.get_tile(c, r)
+                    fg_tile = self.map.foreground.get_tile(c, r)
+                    if tile and tile.type == Tiles.NONE and b_tile and b_tile.type != Tiles.NONE and fg_tile and fg_tile.type == Tiles.NONE:
                         self.inventory.consume(slot.type, 1)
-                        self.map.background1.set_tile(c, r, slot.type)
+                        self.map.furniture.set_tile(c, r, slot.type)
                         return True
                 else:  # building
 
@@ -208,18 +219,17 @@ class DefaultScene(MouseListener, KeyboardListener, World):
                                 self.map.foreground.set_tile(c, r, build_item_type)
                                 return True
                         else:
-                            tile = self.map.background0.get_tile(c, r)
+                            tile = self.map.background.get_tile(c, r)
                             if tile:
                                 slot.amount -= 1
                                 if slot.amount <= 0:
                                     slot.clear()
                                 if tile.type != Tiles.NONE:
                                     self.inventory.add(tile.type, 1)
-                                self.map.background0.set_tile(c, r, build_item_type)
+                                self.map.background.set_tile(c, r, build_item_type)
                                 return True
             return False
-
-        if ev_type == Mouse.SCROLL_UP:
+        elif ev_type == Mouse.SCROLL_UP:
             self.inventory.shift_right()
         elif ev_type == Mouse.SCROLL_DOWN:
             self.inventory.shift_left()
@@ -227,7 +237,71 @@ class DefaultScene(MouseListener, KeyboardListener, World):
             return False
 
     def on_mouse_drag(self, x: float, y: float, ev_type) -> bool:
-        pass
+        pos = self.pos + Vector(x, y)
+        t_w = self.settings.get_tile_width()
+        t_h = self.settings.get_tile_height()
+        c = int(pos.x / t_w)
+        r = int(pos.y / t_h)
+
+        slot = self.inventory.temp
+        if slot.is_empty():
+            slot = self.inventory.slots[self.inventory.index]
+
+        if slot.type == Items.IRON_PICKAXE:  # mining
+            tile = self.map.foreground.get_tile(c, r)
+            if tile and tile.type != Tiles.NONE:
+                self.inventory.add(tile.type, 1)
+                self.map.foreground.set_tile(c, r, 0)
+                return True
+            tile = self.map.furniture.get_tile(c, r)
+            if tile and tile.type != Tiles.NONE:
+                self.inventory.add(tile.type, 1)
+                self.map.furniture.set_tile(c, r, 0)
+                return True
+        elif slot.type == Items.IRON_HAMMER:  # mining background
+            tile = self.map.background.get_tile(c, r)
+            fg_tile = self.map.foreground.get_tile(c, r)
+            f_tile = self.map.furniture.get_tile(c, r)
+            if tile and tile.type != Tiles.NONE and \
+                    fg_tile and fg_tile.type == Tiles.NONE and \
+                    f_tile and f_tile.type == Tiles.NONE:
+                self.inventory.add(tile.type, 1)
+                self.map.background.set_tile(c, r, 0)
+                return True
+        elif slot.type == Tiles.WHITE_TORCH:
+            tile = self.map.furniture.get_tile(c, r)
+            b_tile = self.map.background.get_tile(c, r)
+            fg_tile = self.map.foreground.get_tile(c, r)
+            if tile and tile.type == Tiles.NONE and b_tile and b_tile.type != Tiles.NONE and fg_tile and fg_tile.type == Tiles.NONE:
+                self.inventory.consume(slot.type, 1)
+                self.map.furniture.set_tile(c, r, slot.type)
+                return True
+        else:  # building
+
+            build_item_type = slot.type
+
+            if is_tile(build_item_type):
+                if TileLayers[build_item_type] == Layers.FOREGROUND:
+                    tile = self.map.foreground.get_tile(c, r)
+                    if tile:
+                        slot.amount -= 1
+                        if slot.amount <= 0:
+                            slot.clear()
+                        if tile.type != Tiles.NONE:
+                            self.inventory.add(tile.type, 1)
+                        self.map.foreground.set_tile(c, r, build_item_type)
+                        return True
+                else:
+                    tile = self.map.background.get_tile(c, r)
+                    if tile:
+                        slot.amount -= 1
+                        if slot.amount <= 0:
+                            slot.clear()
+                        if tile.type != Tiles.NONE:
+                            self.inventory.add(tile.type, 1)
+                        self.map.background.set_tile(c, r, build_item_type)
+                        return True
+            return False
 
     def on_mouse_up(self, x: float, y: float, ev_type) -> bool:
         pass

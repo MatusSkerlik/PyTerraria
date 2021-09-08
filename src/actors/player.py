@@ -13,6 +13,9 @@ class Player(MouseListener, KeyboardListener, Actor):
 
     def on_key_down(self, key) -> bool:
         self.keys_down[key] = True
+
+        if key == Key.SPACE:
+            self.pos.y = 0
         return False
 
     def on_key_up(self, key) -> bool:

@@ -1,110 +1,21 @@
+import pygame
 import random
+import time
+from enum import Enum
 from pathlib import Path
+from pygame import Surface, Color, SRCALPHA, BLEND_RGBA_MIN
 from typing import Tuple, Union, Dict
 
-import pygame
-from pygame import Surface, Color, SRCALPHA, BLEND_RGBA_MIN
-
 from src.actor import ActorState
-from src.asyncio import run_coroutine
 from src.map import GridListener, GridType, Tile
+from src.parellel import run_in_thread
 from src.rect import Rect
 from src.scene import SceneListener
 from src.settings import ApplicationSettings
-from src.tables import Actors, Tiles, Items, Backgrounds
+from src.tables import Actors, Tiles, Items
 from src.vector import Vector
 
 # tile states with corresponding areas
-
-_tile_state_areas = {
-
-    0: [(18, 0, 16, 16), (36, 0, 16, 16), (54, 0, 16, 16)],  # top
-    1: [(18, 36, 16, 16), (36, 36, 16, 16), (54, 36, 16, 16)],  # bottom
-    2: [(0, 0, 16, 16), (0, 18, 16, 16), (0, 36, 16, 16)],  # left
-    3: [(72, 0, 16, 16), (72, 18, 16, 16), (72, 36, 16, 16)],  # right
-    4: [(18, 18, 16, 16), (36, 18, 16, 16), (54, 18, 16, 16)],  # center
-    5: [(0, 54, 16, 16), (36, 54, 16, 16), (72, 54, 16, 16)],  # top left
-    6: [(18, 54, 16, 16), (54, 54, 16, 16), (90, 54, 16, 16)],  # top right
-    7: [(0, 72, 16, 16), (36, 72, 16, 16), (72, 72, 16, 16)],  # bottom left
-    8: [(18, 72, 16, 16), (54, 72, 16, 16), (90, 72, 16, 16)],  # bottom right
-    9: [(108, 0, 16, 16), (126, 0, 16, 16), (144, 0, 16, 16)],  # top isolated
-    10: [(108, 54, 16, 16), (126, 54, 16, 16), (144, 54, 16, 16)],  # bottom isolated
-    11: [(162, 0, 16, 16), (162, 18, 16, 16), (162, 36, 16, 16)],  # left isolated
-    12: [(216, 0, 16, 16), (216, 18, 16, 16), (216, 36, 16, 16)],  # right isolated
-    13: [(162, 54, 16, 16), (180, 54, 16, 16), (198, 54, 16, 16)],  # isolated
-    14: [(90, 0, 16, 16), (90, 18, 16, 16), (90, 36, 16, 16)],  # tunnel vertical
-    15: [(108, 72, 16, 16), (126, 72, 16, 16), (144, 72, 16, 16)],  # tunnel horizontal
-
-    16: [(0, 90, 16, 16), (0, 126, 16, 16), (0, 162, 16, 16)],  # diffuse center top left
-    17: [(18, 90, 16, 16), (18, 126, 16, 16), (18, 162, 16, 16)],  # diffuse center top right
-    18: [(0, 108, 16, 16), (0, 144, 16, 16), (0, 180, 16, 16)],  # diffuse center bottom left
-    19: [(18, 108, 16, 16), (18, 144, 16, 16), (18, 180, 16, 16)],  # diffuse center bottom right
-
-    20: [(36, 90, 16, 16), (36, 126, 16, 16), (36, 162, 16, 16)],  # diffuse top top left
-    21: [(54, 90, 16, 16), (54, 126, 16, 16), (54, 162, 16, 16)],  # diffuse top top right
-    22: [(36, 108, 16, 16), (36, 144, 16, 16), (36, 180, 16, 16)],  # diffuse bottom bottom left
-    23: [(54, 108, 16, 16), (54, 144, 16, 16), (54, 180, 16, 16)],  # diffuse bottom bottom right
-
-    24: [(144, 108, 16, 16), (162, 108, 16, 16), (180, 108, 16, 16)],  # diffuse top
-    25: [(144, 90, 16, 16), (162, 90, 16, 16), (180, 90, 16, 16)],  # diffuse bottom
-    26: [(162, 126, 16, 16), (162, 144, 16, 16), (162, 162, 16, 16)],  # diffuse left
-    27: [(144, 126, 16, 16), (144, 144, 16, 16), (144, 162, 16, 16)],  # diffuse right
-
-    28: [(180, 126, 16, 16), (180, 144, 16, 16), (180, 162, 16, 16)],  # diffuse tunnel vertical
-    29: [(144, 180, 16, 16), (162, 180, 16, 16), (180, 180, 16, 16)],  # diffuse tunnel horizontal
-
-    30: [(198, 90, 16, 16), (198, 108, 16, 16), (198, 126, 16, 16)],  # diffuse isolated top
-    31: [(198, 144, 16, 16), (198, 162, 16, 16), (198, 180, 16, 16)],  # diffuse isolated down
-    32: [(216, 90, 16, 16), (216, 108, 16, 16), (216, 126, 16, 16)],  # diffuse isolated left
-    33: [(216, 144, 16, 16), (216, 162, 16, 16), (216, 180, 16, 16)],  # diffuse isolated right
-
-    34: [(108, 198, 16, 16), (126, 198, 16, 16), (144, 198, 16, 16)],  # diffuse isolated
-
-    # f1 n1 s2 top, down, left, right
-
-    35: [(234, 0, 16, 16), (252, 0, 16, 16), (270, 0, 16, 16)],  # none friendly same same
-    36: [(234, 18, 16, 16), (252, 18, 16, 16), (270, 18, 16, 16)],  # friendly none same same
-    37: [(234, 36, 16, 16), (252, 36, 16, 16), (270, 36, 16, 16)],  # same same none friendly
-    38: [(234, 54, 16, 16), (252, 54, 16, 16), (270, 54, 16, 16)],  # same same friendly none
-
-    # f1 n1 s2 left right (corner)
-    39: [(72, 90, 16, 16), (72, 108, 16, 16), (72, 126, 16, 16)],  # same friendly none same
-    40: [(90, 90, 16, 16), (90, 108, 16, 16), (90, 126, 16, 16)],  # same friendly same none
-    41: [(72, 144, 16, 16), (72, 162, 16, 16), (72, 180, 16, 16)],  # friendly same none same
-    42: [(90, 144, 16, 16), (90, 162, 16, 16), (72, 180, 16, 16)],  # friendly same same none
-
-    # f1 n1 s2 top down (corner)
-    43: [(0, 198, 16, 16), (18, 198, 16, 16), (36, 198, 16, 16)],  # none same friendly same
-    44: [(0, 216, 16, 16), (18, 216, 16, 16), (36, 216, 16, 16)],  # same none friendly same
-    45: [(54, 198, 16, 16), (72, 198, 16, 16), (90, 198, 16, 16)],  # none same same friendly
-    46: [(54, 216, 16, 16), (72, 216, 16, 16), (90, 216, 16, 16)],  # same none same friendly
-
-    # f1 n2 s1
-    47: [(126, 90, 16, 16), (126, 108, 16, 16), (126, 126, 16, 16)],  # same friendly none none
-    48: [(126, 144, 16, 16), (126, 162, 16, 16), (126, 180, 16, 16)],  # friendly same none none
-    49: [(0, 252, 16, 16), (18, 252, 16, 16), (36, 252, 16, 16)],  # none none friendly same
-    50: [(54, 252, 16, 16), (72, 252, 16, 16), (90, 252, 16, 16)],  # none none same friendly
-
-    # f1 n3
-    51: [(108, 90, 16, 16), (108, 108, 16, 16), (108, 126, 16, 16)],  # none friendly none none
-    52: [(108, 144, 16, 16), (108, 162, 16, 16), (108, 180, 16, 16)],  # friendly none none none
-    53: [(0, 234, 16, 16), (18, 234, 16, 16), (36, 234, 16, 16)],  # none none friendly none
-    54: [(54, 234, 16, 16), (72, 234, 16, 16), (90, 234, 16, 16)],  # none none nne friendly
-
-    # f2 n2
-    55: [(108, 216, 16, 16), (108, 234, 16, 16), (108, 252, 16, 16)],  # friendly friendly none none
-    56: [(162, 198, 16, 16), (180, 198, 16, 16), (198, 198, 16, 16)],  # none none friendly friendly
-
-}
-
-_background_tile_state_areas = {
-    0: [(36, 36, 32, 32), (72, 36, 32, 32), (108, 36, 32, 32)],  # center
-    1: [(324, 108, 32, 32), (360, 108, 32, 32), (396, 108, 32, 32)],  # full
-    2: [(0, 0, 32, 32), (0, 36, 32, 32), (0, 72, 32, 32)],  # only left empty
-    3: [(108, 0, 32, 32), (108, 36, 32, 32), (108, 72, 32, 32)],  # only right empty
-    4: [(36, 0, 32, 32), (72, 0, 32, 32), (108, 0, 32, 32)],  # only top empty
-    5: [(36, 72, 32, 32), (72, 72, 32, 32), (108, 72, 32, 32)],  # only bottom empty
-}
 
 _tree_state_areas = {
 
@@ -121,44 +32,7 @@ _tree_state_areas = {
 }
 
 _torch_areas = {
-    0: [(4, 0, 16, 20)],
-    1: [(22, 0, 20, 20)],
-    2: [(44, 0, 20, 20)]
-}
 
-_tree_top_areas = {0: [(0, 0, 80, 80), (82, 0, 80, 80), (164, 0, 80, 80)]}
-
-_actor_areas = {
-    0: [(0, 0, 40, 56)],  # idle
-    1: [(0, 56, 40, 56), (0, 112, 40, 56), (0, 168, 40, 56), (0, 224, 40, 56)],  # interaction
-    2: [(0, 280, 40, 56)],  # jumping
-    3: [(0, 336, 40, 56), (0, 392, 40, 56), (0, 448, 40, 56), (0, 504, 40, 56), (0, 560, 40, 56),
-        (0, 616, 40, 56), (0, 672, 40, 56), (0, 728, 40, 56), (0, 784, 40, 56), (0, 840, 40, 56), (0, 896, 40, 56),
-        (0, 952, 40, 56), (0, 1008, 40, 56), (0, 1064, 40, 56)]  # walking
-}
-
-_tileset_table = {
-
-    # id, #filename, #diffusion tile, sprite_type, #areas dict
-    Tiles.NONE: ("Tiles_00", 0, 0, _tile_state_areas),  # NONE / light
-    Tiles.DIRT: ("Tiles_0", 1, 0, _tile_state_areas),  # dirt
-    Tiles.STONE: ("Tiles_1", 1, 0, _tile_state_areas),  # stone
-    Tiles.LEAD: ("Tiles_6", 1, 0, _tile_state_areas),  # lead
-    Tiles.COPPER: ("Tiles_7", 1, 0, _tile_state_areas),  # copper
-    Tiles.GOLD: ("Tiles_8", 1, 0, _tile_state_areas),  # gold
-    Tiles.SILVER: ("Tiles_9", 1, 0, _tile_state_areas),  # silver
-    Tiles.ASH: ("Tiles_57", 2, 0, _tile_state_areas),  # ash
-    Tiles.WHITE_TORCH: ("Tiles_4", 0, 2, _torch_areas),  # torch
-
-    100: ("Tiles_5", 0, 1, _tree_state_areas),  # tree log
-    105: ("Tree_Tops", 0, 5, _tree_top_areas),  # tree top
-
-    200: ("Wall_2", 0, 2, _background_tile_state_areas)
-}
-
-_actorset_table = {
-    # id, # filename, # areas dict
-    Actors.PLAYER: ("Silver", _actor_areas)
 }
 
 _itemset_table = {
@@ -178,132 +52,62 @@ _itemset_table = {
     Tiles.WHITE_TORCH: ("Item_8", [0, 0, 16, 16])
 }
 
-_background_table = {
-    Backgrounds.DEFAULT: ("Forest_background_2", [0, 0, 1024, 838])
-}
-
-# blit surfaces for each tile state ( lazy )
-_tile_sprites = {
-
-}
-
-# blit surfaces for each actor state ( lazy )
-_actor_sprites = {
-
-}
-
-_item_sprites = {
-
-}
-
-_background_sprites = {
-
-}
-
-
-def get_tile_sprite(tile_type: int, state: int, index: int = -1):
-    """ Get index or random sprite for tile with state """
-
-    tile_state_dict = _tile_sprites.get(tile_type)
-    if tile_state_dict is not None:
-        state_choices = tile_state_dict.get(state)
-        if state_choices is not None:
-            if index > -1:
-                return state_choices[index]
-            else:
-                length = len(state_choices)
-                return state_choices[random.randint(0, length - 1)]
-    return None
-
-
-def get_actor_sprite(actor_type: int, type_state: int):
-    actor_state_dict = _actor_sprites.get(actor_type)
-    if actor_state_dict:
-        return actor_state_dict.get(type_state)
-    else:
-        return None
-
-
-def get_item_sprite(item_type: int):
-    return _item_sprites[item_type]
-
-
-def create_sprites_for_tile(camera, tile_type: int, scale: float = 1.0):
-    """ Blit surfaces for tile types """
-    filename, diffusion_type, sprite_type, ar = _tileset_table[tile_type]
-    values = ar.values()
-
-    _tile_sprites[tile_type] = {}
-
-    for area_type_index, areas in zip(range(len(values)), values):
-        sprites = [Sprite(camera, filename, (area,), 0) for area in areas]
-        if scale != 1.0:
-            for sprite in sprites:
-                sprite.scale(scale)
-        _tile_sprites[tile_type][area_type_index] = sprites
-
-
-def create_sprites_for_actor(camera, actor_type: int):
-    filename, ar = _actorset_table[actor_type]
-    values = ar.values()
-
-    _actor_sprites[actor_type] = {}
-
-    for area_type_index, areas in zip(range(len(values)), values):
-        _actor_sprites[actor_type][area_type_index] = Sprite(camera, filename, areas, 0.04)
-
-
-def create_sprites_for_items(camera, item_type: int):
-    filename, ar = _itemset_table[item_type]
-    _item_sprites[item_type] = Sprite(camera, filename, (ar,), 0)
-
 
 def chunk_key(chunk_col: int, chunk_row: int):
     """ :return: index for chunk col, row """
     return "col{}, row{}".format(chunk_col, chunk_row)
 
 
-def horizontal_vertical(size, vertical_start, vertical_end, horizontal_start, horizontal_end, max_depth):
-    surf_v = pygame.Surface((1, max_depth), pygame.SRCALPHA, 32)
-    surf_h = pygame.Surface((max_depth, 1), pygame.SRCALPHA, 32)
+def gradient(size: Tuple[int, int], v_s: Color, v_e: Color, h_s: Color, h_e: Color, depth: int):
+    """
+    :param size size of returned surface
+    :param v_s starting vertical color
+    :param v_e ending vertical color
+    :param h_s starting horizontal color
+    :param h_e ending horizontal color
+    :param depth depth of scaling
+    :return: Surface
+    """
+    vertical = pygame.Surface((1, depth), pygame.SRCALPHA, 32)
+    horizontal = pygame.Surface((depth, 1), pygame.SRCALPHA, 32)
 
-    dd = 1.0 / max_depth
-    vsr, vsg, vsb, vsa = vertical_start
-    ver, veg, veb, vea = vertical_end
+    dd = 1.0 / depth
+    vsr, vsg, vsb, vsa = v_s
+    ver, veg, veb, vea = v_e
     vrm = (ver - vsr) * dd
     vgm = (veg - vsg) * dd
     vbm = (veb - vsb) * dd
     vam = (vea - vsa) * dd
 
-    hsr, hsg, hsb, hsa = horizontal_start
-    her, heg, heb, hea = horizontal_end
+    hsr, hsg, hsb, hsa = h_s
+    her, heg, heb, hea = h_e
     hrm = (her - hsr) * dd
     hgm = (heg - hsg) * dd
     hbm = (heb - hsb) * dd
     ham = (hea - hsa) * dd
 
-    for x in range(max_depth):
-        surf_h.set_at((x, 0),
-                      (
-                          int(hsr + hrm * x),
-                          int(hsg + hgm * x),
-                          int(hsb + hbm * x),
-                          int(hsa + ham * x)
-                      ))
-    surf_h = pygame.transform.scale(surf_h, size)
+    for x in range(depth):
+        horizontal.set_at((x, 0),
+                          (
+                              int(hsr + hrm * x),
+                              int(hsg + hgm * x),
+                              int(hsb + hbm * x),
+                              int(hsa + ham * x)
+                          ))
+    horizontal = pygame.transform.scale(horizontal, size)
 
-    for y in range(max_depth):
-        surf_v.set_at((0, y),
-                      (
-                          int(vsr + vrm * y),
-                          int(vsg + vgm * y),
-                          int(vsb + vbm * y),
-                          int(vsa + vam * y)
-                      ))
-    surf_v = pygame.transform.scale(surf_v, size)
+    for y in range(depth):
+        vertical.set_at((0, y),
+                        (
+                            int(vsr + vrm * y),
+                            int(vsg + vgm * y),
+                            int(vsb + vbm * y),
+                            int(vsa + vam * y)
+                        ))
+    vertical = pygame.transform.scale(vertical, size)
+    horizontal.blit(vertical, (0, 0, size[0], size[1]))
 
-    surf_h.blit(surf_v, (0, 0, size[0], size[1]))
-    return surf_h
+    return horizontal
 
 
 class TextureFactory:
@@ -334,7 +138,15 @@ class Camera(Rect):
         self.scene = scene
 
     def _blit(self, surface: Surface, dest: Vector, area: Union[None, Tuple[Vector, Vector]]):
-        self.surface.blit(surface, dest, area)
+        self.surface.blit(surface, (dest.x, dest.y), area)
+
+    def draw_sprite(self, sprite, pos: Vector, delta_time: float, translate: bool = True):
+        if translate:
+            n_pos = pos - self.pos
+        else:
+            n_pos = pos
+
+        sprite.render(self.surface, n_pos, delta_time)
 
     def draw_surface(self, surface: Surface, pos: Vector, area: Tuple[Vector, Vector], translate: bool = True):
         """ Saves draw information into queue for next render to draw """
@@ -342,7 +154,7 @@ class Camera(Rect):
             n_pos = pos - self.pos
         else:
             n_pos = pos
-        self._blit(surface, (n_pos.x, n_pos.y), area)
+        self._blit(surface, n_pos, area)
 
     def draw_rect(self, rect: Tuple[Vector, Vector], color: Color, translate: bool = True):
         """ Saves draw information into queue for next render to draw """
@@ -356,7 +168,7 @@ class Camera(Rect):
         else:
             n_pos = pos
 
-        self._blit(surface, (n_pos.x, n_pos.y), None)
+        self._blit(surface, n_pos, None)
 
     def draw_line(self, start: Vector, end: Vector, width: int, color: Color, translate: bool = True):
         if translate:
@@ -388,7 +200,7 @@ class Camera(Rect):
         else:
             n_pos = pos
 
-        self._blit(text_surface, (n_pos.x, n_pos.y), None)
+        self._blit(text_surface, n_pos, None)
 
     def update(self, delta_time: float):
         followee = self.scene.get_followee()
@@ -397,25 +209,46 @@ class Camera(Rect):
             pos = self.pos
             new_pos = followee.pos + (followee.size / 2) - (self.size / 2)
             self.pos += (new_pos - pos) * 4 * delta_time
-
         self.scene.pos = self.pos
 
     def render(self, delta_time: float):
         """ Draw each layer into system surface """
+        #
+        # def update_screen(lock, arg):
+        #     lock.acquire()
+        #     pygame.display.update(*arg)
+        #     lock.release()
+        #
+        # w, h = self.size.x, self.size.y
+        # wh, hh = w / 2, h / 2
+        #
+        # l0 = _thread.allocate_lock()
+        # l1 = _thread.allocate_lock()
+        # l2 = _thread.allocate_lock()
+        # l3 = _thread.allocate_lock()
+        #
+        # _thread.start_new_thread(update_screen, (l0, (0, 0, wh - 1, hh - 1)))
+        # _thread.start_new_thread(update_screen, (l1, (wh, 0, wh - 1, hh - 1)))
+        # _thread.start_new_thread(update_screen, (l2, (0, hh, wh - 1, hh - 1)))
+        # _thread.start_new_thread(update_screen, (l3, (wh, hh, wh - 1, hh - 1)))
+        #
+        # locked = True
+        # while locked:
+        #     locked = l0.locked() or l1.locked() or l2.locked() or l3.locked()
+        # _thread.start_new_thread(pygame.display.flip, tuple())
+        # run_in_thread(pygame.display.flip, tuple(), priority=0)
         pygame.display.flip()
 
 
 class Sprite:
 
-    def __init__(self, camera, file_name, rects: Tuple[Tuple[int, int, int, int]], rect_time: float):
+    def __init__(self, file_name, rects: Tuple[Tuple[int, int, int, int]], rect_time: float, alpha=True):
         """
-        :param camera viewport
         :param file_name of file
         :param rects ((x, y, w, h), ...)
         :param rect_time time for each rect to play in ms
         """
-        self.camera = camera
-
+        self.alpha = alpha
         self.filename = file_name
         self.rect_time = rect_time
         self.static = rect_time == 0
@@ -484,16 +317,11 @@ class Sprite:
             clip = self.clips[i]
             w = clip.get_width()
             h = clip.get_height()
-            self.clips[i] = pygame.transform.smoothscale(clip, (int(w * factor), int(h * factor)))
+            self.clips[i] = pygame.transform.scale(clip, (int(w * factor), int(h * factor)))
+
         self.clip = self.clips[self.i]
 
     def resize(self, width: int, height: int):
-        for i in range(self.len):
-            clip = self.clips[i]
-            self.clips[i] = pygame.transform.smoothscale(clip, (width, height))
-        self.clip = self.clips[self.i]
-
-    def transform(self, width: int, height: int):
         """ Change sprite width and height """
 
         for i in range(self.len):
@@ -516,7 +344,10 @@ class Sprite:
             texture = TextureFactory.load(self.filename)
             for i in range(self.len):
                 x, y, w, h = clips[i]
-                clip = Surface((w, h), SRCALPHA, 32)
+                if self.alpha:
+                    clip = Surface((w, h), SRCALPHA, 32)
+                else:
+                    clip = Surface((w, h), 0, 8)
                 clip.fill(Color(0, 0, 0, 0))
                 clip.blit(texture, (0, 0), pygame.Rect(x, y, w, h))
                 self.clips.append(clip)
@@ -533,7 +364,7 @@ class Sprite:
         else:
             self.static = False
 
-    def render(self, pos: Vector, delta_time: float):
+    def render(self, surface: Surface, pos: Vector, delta_time: float):
         if not self.static:
             self.time_elapsed += delta_time
             if self.time_elapsed >= self.rect_time:
@@ -543,307 +374,407 @@ class Sprite:
                 self.i %= self.len
                 self.clip = self.clips[self.i]
 
-        self.camera.draw_surface(self.clip, pos, None)
+        surface.blit(self.clip, [pos.x, pos.y, self.get_width(), self.get_height()], None)
 
 
 class ActorSpriteResolver:
+    textures = {
+        Actors.PLAYER: "Silver"
 
-    def __init__(self, actor) -> None:
-        self.actor = actor
+    }
 
-    def get_state(self):
-        if self.actor.get_state() & ActorState.IDLE:
-            return 0
-        elif self.actor.get_state() & ActorState.INTERACTION:
-            return 1
-        elif self.actor.get_state() & ActorState.JUMPING:
-            return 2
-        elif self.actor.get_state() & ActorState.WALKING:
-            return 3
+    class Areas(Enum):
+        IDLE = [(0, 0, 40, 56)]
+        INTERACTION = [(0, 56, 40, 56), (0, 112, 40, 56), (0, 168, 40, 56), (0, 224, 40, 56)]
+        JUMPING = [(0, 280, 40, 56)]
+        WALKING = [(0, 336, 40, 56), (0, 392, 40, 56), (0, 448, 40, 56), (0, 504, 40, 56), (0, 560, 40, 56),
+                   (0, 616, 40, 56), (0, 672, 40, 56), (0, 728, 40, 56), (0, 784, 40, 56), (0, 840, 40, 56),
+                   (0, 896, 40, 56),
+                   (0, 952, 40, 56), (0, 1008, 40, 56), (0, 1064, 40, 56)]
+
+    sprites = {}
+
+    @classmethod
+    def create_sprite(cls, actor, area_type: Areas):
+        filename = cls.textures[actor.type]
+        cls.sprites[area_type] = Sprite(filename, area_type.value, 0.05)
+
+    @classmethod
+    def resolve_actor_sprite_area_type(cls, actor):
+        if actor.get_state() & ActorState.IDLE:
+            return cls.Areas.IDLE
+        elif actor.get_state() & ActorState.INTERACTION:
+            return cls.Areas.INTERACTION
+        elif actor.get_state() & ActorState.JUMPING:
+            return cls.Areas.JUMPING
+        elif actor.get_state() & ActorState.WALKING:
+            return cls.Areas.WALKING
         else:
             raise AttributeError
 
-    def get_sprite(self):
-        return get_actor_sprite(self.actor.type, self.get_state())
+    @classmethod
+    def get_sprite(cls, actor):
+        area_type = cls.resolve_actor_sprite_area_type(actor)
+        if cls.sprites.get(area_type) is None:
+            cls.create_sprite(actor, area_type)
+        return cls.sprites.get(area_type)
 
 
-class TileSpriteResolver:
+class ForegroundSpriteResolver:
+    textures = {
+        Tiles.NONE: ["Tiles_00", Tiles.NONE],
+        Tiles.DIRT: ["Tiles_0", Tiles.STONE],
+        Tiles.STONE: ["Tiles_1", Tiles.DIRT],
+        Tiles.LEAD: ["Tiles_6", Tiles.DIRT],
+        Tiles.COPPER: ["Tiles_7", Tiles.DIRT],
+        Tiles.GOLD: ["Tiles_8", Tiles.DIRT],
+        Tiles.SILVER: ["Tiles_9", Tiles.DIRT],
+        Tiles.ASH: ["Tiles_57", Tiles.STONE]
+    }
 
-    def __init__(self, map_, tile: Tile) -> None:
-        self.map = map_
-        self.tile = tile
+    class Areas(Enum):
+        SSSS = [(18, 18, 16, 16), (36, 18, 16, 16), (54, 18, 16, 16)]  # center
+        NNNN = [(162, 54, 16, 16), (180, 54, 16, 16), (198, 54, 16, 16)]  # isolated
 
-    def get_diffusion_type(self) -> int:
-        filename, diffusion_type, sprite_type, areas = _tileset_table[self.tile.type]
-        return diffusion_type
+        FSFS = [(36, 90, 16, 16), (36, 126, 16, 16), (36, 162, 16, 16)]  # diffuse top top left
+        FSSF = [(54, 90, 16, 16), (54, 126, 16, 16), (54, 162, 16, 16)]  # diffuse top top right
+        SFFS = [(36, 108, 16, 16), (36, 144, 16, 16), (36, 180, 16, 16)]  # diffuse bottom bottom left
+        SFSF = [(54, 108, 16, 16), (54, 144, 16, 16), (54, 180, 16, 16)]  # diffuse bottom bottom right
 
-    def get_state(self):
-        """ Returns state of tile sprite """
+        FSSS = [(144, 108, 16, 16), (162, 108, 16, 16), (180, 108, 16, 16)]  # diffuse top
+        SFSS = [(144, 90, 16, 16), (162, 90, 16, 16), (180, 90, 16, 16)]  # diffuse bottom
+        SSFS = [(162, 126, 16, 16), (162, 144, 16, 16), (162, 162, 16, 16)]  # diffuse left
+        SSSF = [(144, 126, 16, 16), (144, 144, 16, 16), (144, 162, 16, 16)]  # diffuse right
 
-        def is_same(tile: Tile):
-            return self.tile.type == tile.type
+        SSFF = [(180, 126, 16, 16), (180, 144, 16, 16), (180, 162, 16, 16)]  # diffuse tunnel vertical
+        FFSS = [(144, 180, 16, 16), (162, 180, 16, 16), (180, 180, 16, 16)]  # diffuse tunnel horizontal
 
-        def is_friendly(tile: Tile):
-            return tile.type == self.get_diffusion_type()
+        FSFF = [(198, 90, 16, 16), (198, 108, 16, 16), (198, 126, 16, 16)]  # diffuse isolated top
+        SFFF = [(198, 144, 16, 16), (198, 162, 16, 16), (198, 180, 16, 16)]  # diffuse isolated down
+        FFFS = [(216, 90, 16, 16), (216, 108, 16, 16), (216, 126, 16, 16)]  # diffuse isolated left
+        FFSF = [(216, 144, 16, 16), (216, 162, 16, 16), (216, 180, 16, 16)]  # diffuse isolated right
 
-        def is_none(tile: Tile):
-            return tile.type == Tiles.NONE or (self.tile.type != tile.type and not is_reversed(tile))
+        FFFF = [(108, 198, 16, 16), (126, 198, 16, 16), (144, 198, 16, 16)]  # diffuse isolated
 
-        def is_reversed(tile: Tile):
-            _, diff, __, ___ = _tileset_table[tile.type]
-            return tile.type != Tiles.NONE and diff == self.tile.type
+        # f1 n1 s2 top, down, left, right
+        NFSS = [(234, 0, 16, 16), (252, 0, 16, 16), (270, 0, 16, 16)]  # none friendly same same
+        FNSS = [(234, 18, 16, 16), (252, 18, 16, 16), (270, 18, 16, 16)]  # friendly none same same
+        SSNF = [(234, 36, 16, 16), (252, 36, 16, 16), (270, 36, 16, 16)]  # same same none friendly
+        SSFN = [(234, 54, 16, 16), (252, 54, 16, 16), (270, 54, 16, 16)]  # same same friendly none
 
-        def nbs_count(nbs):
-            same_count, friendly_count, none, revers = 0, 0, 0, 0
+        # f1 n1 s2 left right (corner)
+        SFNS = [(72, 90, 16, 16), (72, 108, 16, 16), (72, 126, 16, 16)]  # same friendly none same
+        SFSN = [(90, 90, 16, 16), (90, 108, 16, 16), (90, 126, 16, 16)]  # same friendly same none
+        FSNS = [(72, 144, 16, 16), (72, 162, 16, 16), (72, 180, 16, 16)]  # friendly same none same
+        FSSN = [(90, 144, 16, 16), (90, 162, 16, 16), (72, 180, 16, 16)]  # friendly same same none
 
-            for n in nbs:
-                if is_same(n):
-                    same_count += 1
-                elif is_friendly(n):
-                    friendly_count += 1
-                elif is_reversed(n):
-                    revers += 1
+        # f1 n1 s2 top down (corner)
+        NSFS = [(0, 198, 16, 16), (18, 198, 16, 16), (36, 198, 16, 16)]  # none same friendly same
+        SNFS = [(0, 216, 16, 16), (18, 216, 16, 16), (36, 216, 16, 16)]  # same none friendly same
+        NSSF = [(54, 198, 16, 16), (72, 198, 16, 16), (90, 198, 16, 16)]  # none same same friendly
+        SNSF = [(54, 216, 16, 16), (72, 216, 16, 16), (90, 216, 16, 16)]  # same none same friendly
 
-                if is_none(n):
-                    none += 1
+        # f1 n2 s1
+        SFNN = [(126, 90, 16, 16), (126, 108, 16, 16), (126, 126, 16, 16)]  # same friendly none none
+        FSNN = [(126, 144, 16, 16), (126, 162, 16, 16), (126, 180, 16, 16)]  # friendly same none none
+        NNFS = [(0, 252, 16, 16), (18, 252, 16, 16), (36, 252, 16, 16)]  # none none friendly same
+        NNSF = [(54, 252, 16, 16), (72, 252, 16, 16), (90, 252, 16, 16)]  # none none same friendly
 
-            return same_count, friendly_count, none, revers
+        # f1 n3
+        FNNN = [(108, 144, 16, 16), (108, 162, 16, 16), (108, 180, 16, 16)]  # friendly none none none
+        NFNN = [(108, 90, 16, 16), (108, 108, 16, 16), (108, 126, 16, 16)]  # none friendly none none
+        NNFN = [(0, 234, 16, 16), (18, 234, 16, 16), (36, 234, 16, 16)]  # none none friendly none
+        NNNF = [(54, 234, 16, 16), (72, 234, 16, 16), (90, 234, 16, 16)]  # none none nne friendly
 
-        col = self.tile.col
-        row = self.tile.row
-        top, down, left, right = self.map.get_nbs(col, row)
+        # f2 n2
+        FFNN = [(108, 216, 16, 16), (108, 234, 16, 16), (108, 252, 16, 16)]  # friendly friendly none none
+        NNFF = [(162, 198, 16, 16), (180, 198, 16, 16), (198, 198, 16, 16)]  # none none friendly friendly
 
-        if top and down and left and right:
+        NSNN = [(108, 0, 16, 16), (126, 0, 16, 16), (144, 0, 16, 16)]  # top isolated
+        SNNN = [(108, 54, 16, 16), (126, 54, 16, 16), (144, 54, 16, 16)]  # bottom isolated
+        NNNS = [(162, 0, 16, 16), (162, 18, 16, 16), (162, 36, 16, 16)]  # left isolated
+        NNSN = [(216, 0, 16, 16), (216, 18, 16, 16), (216, 36, 16, 16)]  # right isolated
 
-            same, friendly, none, revers = nbs_count((top, down, left, right))
+        NSNS = [(0, 54, 16, 16), (36, 54, 16, 16), (72, 54, 16, 16)]  # top left
+        NSSN = [(18, 54, 16, 16), (54, 54, 16, 16), (90, 54, 16, 16)]  # top right
+        SNNS = [(0, 72, 16, 16), (36, 72, 16, 16), (72, 72, 16, 16)]  # bottom left
+        SNSN = [(18, 72, 16, 16), (54, 72, 16, 16), (90, 72, 16, 16)]  # bottom right
 
-            if same == 4:
-                return 4
-            elif same == 3 and friendly == 1:
-                if is_friendly(top):
-                    return 24
-                elif is_friendly(down):
-                    return 25
-                elif is_friendly(left):
-                    return 26
-                elif is_friendly(right):
-                    return 27
-            elif same == 2 and friendly == 2:
-                if is_friendly(top) and is_friendly(down):
-                    return 29
-                elif is_friendly(left) and is_friendly(right):
-                    return 28
-                elif is_friendly(top):
-                    if is_friendly(left):
-                        return 20
-                    elif is_friendly(right):
-                        return 21
-                elif is_friendly(down):
-                    if is_friendly(left):
-                        return 22
-                    elif is_friendly(right):
-                        return 23
-            elif same == 1 and friendly == 3:
-                if is_friendly(left) and is_friendly(right):
-                    if is_friendly(top):
-                        return 30
-                    elif is_friendly(down):
-                        return 31
-                else:
-                    if is_friendly(left):
-                        return 32
-                    elif is_friendly(right):
-                        return 33
-            elif same == 2 and friendly == 1:  # not same = 1
-                if not is_same(top):
-                    if is_friendly(down):
-                        return 35
-                    elif is_friendly(left):
-                        return 43
-                    elif is_friendly(right):
-                        return 45
-                elif not is_same(down):
-                    if is_friendly(top):
-                        return 36
-                    elif is_friendly(left):
-                        return 44
-                    elif is_friendly(right):
-                        return 46
-                elif not is_same(left):
-                    if is_friendly(left):
-                        return 38
-                    elif is_friendly(down):
-                        return 39
-                    elif is_friendly(top):
-                        return 41
-                elif not is_same(right):
-                    if is_friendly(left):
-                        return 37
-                    elif is_friendly(down):
-                        return 40
-                    elif is_friendly(top):
-                        return 42
-            elif same == 1 and friendly == 1 and none == 2:  # not same = 2
-                if is_friendly(down):
-                    return 47
-                elif is_friendly(top):
-                    return 48
-                if is_friendly(left):
-                    return 49
-                elif is_friendly(right):
-                    return 50
-            elif friendly == 2 and none == 2:
-                if is_friendly(top) and is_friendly(down):
-                    return 55
-                elif is_friendly(left) and is_friendly(right):
-                    return 56
-            elif friendly == 1 and none == 3:  # not same = 3
-                if is_friendly(down):
-                    return 51
-                elif is_friendly(top):
-                    return 52
-                elif is_friendly(left):
-                    return 53
-                elif is_friendly(right):
-                    return 54
-            elif friendly == 4:
-                return 34
-            elif same + revers == 3:
-                if is_none(top):
-                    return 0
-                elif is_none(down):
-                    return 1
-                elif is_none(left):
-                    return 2
-                elif is_none(right):
-                    return 3
-            elif same + revers == 2:
-                if is_none(top) and is_none(down):
-                    return 15
-                elif is_none(left) and is_none(right):
-                    return 14
-                elif is_none(top):
-                    if is_none(left):
-                        return 5
-                    elif is_none(right):
-                        return 6
-                elif is_none(down):
-                    if is_none(left):
-                        return 7
-                    elif is_none(right):
-                        return 8
-            elif same + revers == 1:
-                if is_none(left) and is_none(right):
-                    if is_none(top):
-                        return 9
-                    elif is_none(down):
-                        return 10
-                elif is_none(top) and is_none(down):
-                    if is_none(left):
-                        return 11
-                    elif is_none(right):
-                        return 12
-            elif same == 0 and revers != 4:
-                return 13
+        NSSS = [(18, 0, 16, 16), (36, 0, 16, 16), (54, 0, 16, 16)]  # top
+        SNSS = [(18, 36, 16, 16), (36, 36, 16, 16), (54, 36, 16, 16)]  # bottom
+        SSNS = [(0, 0, 16, 16), (0, 18, 16, 16), (0, 36, 16, 16)]  # left
+        SSSN = [(72, 0, 16, 16), (72, 18, 16, 16), (72, 36, 16, 16)]  # right
 
-        return 4  # return center
+        SSNN = [(90, 0, 16, 16), (90, 18, 16, 16), (90, 36, 16, 16)]  # tunnel vertical
+        NNSS = [(108, 72, 16, 16), (126, 72, 16, 16), (144, 72, 16, 16)]  # tunnel horizontal
 
-    def get_surface(self):
-        return get_tile_sprite(self.tile.type, self.get_state()).get_surface()
+    sprites = {}
 
+    @classmethod
+    def create_sprite(cls, tile, area_type: Areas):
+        filename, diff = cls.textures[tile.type]
+        cls.sprites[tile.type] = {}
+        cls.sprites[tile.type][area_type] = Sprite(filename, area_type.value, 0)
 
-class TreeSpriteResolver:
+    @classmethod
+    def resolve_tile_sprite_area_type(cls, grid, tile):
 
-    def __init__(self, map_, tile: Tile) -> None:
-        self.map = map_
-        self.tile = tile
+        def is_friendly(t0, t1):
+            _, diff_t0 = cls.textures[t0.type]
+            _, diff_t1 = cls.textures[t1.type]
+            return t1.type == diff_t0.value or t0.type == diff_t1.value
 
-    def get_state(self):
+        def is_same(t0, t1):
+            return t0.type == t1.type
 
-        def is_tree(tile: Tile):
-            return tile and tile.type == 100
+        def is_none(t0, t1):
+            return t1.type == Tiles.NONE or not is_same(t0, t1)
 
-        def is_none(tile: Tile):
-            return not tile or tile.type == Tiles.NONE
+        def get_func(letter: str):
+            if letter == "N":
+                return is_none
+            elif letter == "S":
+                return is_same
+            elif letter == "F":
+                return is_friendly
+            else:
+                raise AttributeError
 
-        col = self.tile.col
-        row = self.tile.row
+        top, bottom, left, right = grid.get_nbs(tile.col, tile.row)
 
-        top, down, left, right = self.map.get_nbs(col, row)
-
-        if not is_tree(down) and not is_none(down):
-            return random.randint(2, 3)
-        elif is_tree(down) and (is_tree(left) or is_tree(right)):
-            return 8
-        elif not is_tree(down) and is_tree(right):
-            return 7
-        elif not is_tree(down) and is_tree(left):
-            return 6
+        if top and bottom and left and right:
+            for area_type in cls.Areas:
+                area_name = area_type.name
+                if get_func(area_name[0])(tile, top) and \
+                        get_func(area_name[1])(tile, bottom) and \
+                        get_func(area_name[2])(tile, left) and \
+                        get_func(area_name[3])(tile, right):
+                    return area_type
+            raise AttributeError(
+                Tiles(tile.type),
+                Tiles(top.type),
+                Tiles(bottom.type),
+                Tiles(left.type),
+                Tiles(right.type)
+            )
         else:
-            return random.randint(4, 5)
+            return cls.Areas.SSSS
 
-    def get_surface(self):
-        return get_tile_sprite(self.tile.type, self.get_state()).get_surface()
+    @classmethod
+    def get_sprite(cls, grid, tile, size):
+        area_type = cls.resolve_tile_sprite_area_type(grid, tile)
+        try:
+            _ = cls.sprites[tile.type][area_type]
+        except KeyError:
+            cls.create_sprite(tile, area_type)
+        sprite = cls.sprites[tile.type][area_type]
+        sprite.set_clip((tile.col + tile.row) % sprite.len)  # set clip from available
 
+        if sprite.get_width() != size.x or sprite.get_height() != size.y:
+            sprite.scale(size.x / 16)
 
-class TreeTopSpriteResolver:
-
-    def __init__(self, map_, tile: Tile) -> None:
-        self.map = map_
-        self.tile = tile
-
-    def get_surface(self):
-        return get_tile_sprite(self.tile.type, 0).get_surface()
+        return sprite
 
 
 class BackgroundSpriteResolver:
-    def __init__(self, map_, tile: Tile) -> None:
-        self.map = map_
-        self.tile = tile
+    textures = {
+        Tiles.B_DIRT: "Wall_2"
+    }
 
-    def get_state(self):
-        return 0
+    class Areas(Enum):
+        SSSS = [(36, 36, 32, 32), (72, 36, 32, 32), (108, 36, 32, 32)]  # center
+        NNNN = [(324, 108, 32, 32), (360, 108, 32, 32), (396, 108, 32, 32)]  # full
+        SSNS = [(0, 0, 32, 32), (0, 36, 32, 32), (0, 72, 32, 32)]  # only left empty
+        SSSN = [(108, 0, 32, 32), (108, 36, 32, 32), (108, 72, 32, 32)]  # only right empty
+        NSSS = [(36, 0, 32, 32), (72, 0, 32, 32), (108, 0, 32, 32)]  # only top empty
+        SNSS = [(36, 72, 32, 32), (72, 72, 32, 32), (108, 72, 32, 32)]  # only bottom empty
 
-    def get_surface(self):
-        return get_tile_sprite(self.tile.type, self.get_state()).get_surface()
+    sprites = {}
+
+    @classmethod
+    def create_sprite(cls, tile, area_type: Areas):
+        filename = cls.textures[tile.type]
+        cls.sprites[area_type] = Sprite(filename, area_type.value, 0)
+
+    @classmethod
+    def resolve_tile_sprite_area_type(cls, grid, tile):
+        # def is_same(t0, t1):
+        #     return t0.type == t1.type
+        #
+        # def is_none(t0, t1):
+        #     return t0.type == Tiles.NONE
+        #
+        # def get_func(letter: str):
+        #     if letter == "N":
+        #         return is_none
+        #     elif letter == "S":
+        #         return is_same
+        #     else:
+        #         raise AttributeError
+        #
+        # top, bottom, left, right = grid.get_nbs(tile.col, tile.row)
+        #
+        # if top and bottom and left and right:
+        #     for area_type in cls.Areas:
+        #         area_name = area_type.name
+        #         if get_func(area_name[0])(tile, top) and \
+        #                 get_func(area_name[1])(tile, bottom) and \
+        #                 get_func(area_name[2])(tile, left) and \
+        #                 get_func(area_name[3])(tile, right):
+        #             return area_type
+        #     return cls.Areas.SSSS
+        #     # raise AttributeError
+        # else:
+        return cls.Areas.SSSS
+
+    @classmethod
+    def get_sprite(cls, grid, tile, size):
+        area_type = cls.resolve_tile_sprite_area_type(grid, tile)
+        if cls.sprites.get(area_type) is None:
+            cls.create_sprite(tile, area_type)
+
+        sprite = cls.sprites.get(area_type)
+        sprite.set_clip((tile.col + tile.row) % sprite.len)  # set clip from available
+
+        if sprite.get_width() != size.x or sprite.get_height() != size.y:
+            sprite.scale(size.x / 32)
+
+        return sprite
 
 
-class LightMaskSpriteResolver:
-    def __init__(self, map_, tile: Tile) -> None:
-        self.map = map_
-        self.tile = tile
+class FurnitureSpriteResolver:
+    textures = {
+        Tiles.WHITE_TORCH: "Tiles_4"
+    }
 
-    def get_surface(self):
-        col = self.tile.col
-        row = self.tile.row
-        top, down, left, right = self.map.get_nbs(col, row)
+    class Areas(Enum):
+        WHITE_TORCH = [(4, 0, 16, 20), (22, 0, 20, 20), (44, 0, 20, 20)]
 
-        if self.tile.type != 0:
-            t_v = abs(top.type) if top else 0
-            d_v = abs(down.type) if down else 0
-            l_v = abs(left.type) if left else 0
-            r_v = abs(right.type) if right else 0
-            return horizontal_vertical((16, 16),
-                                       (0, 0, 0, t_v / 15 * 255),
-                                       (0, 0, 0, d_v / 15 * 255),
-                                       (0, 0, 0, l_v / 15 * 255),
-                                       (0, 0, 0, r_v / 15 * 255),
-                                       2)
+    sprites = {}
+
+    @classmethod
+    def create_sprite(cls, tile, area_type: Areas):
+        filename = cls.textures[tile.type]
+        cls.sprites[area_type] = Sprite(filename, area_type.value, 0)
+
+    @classmethod
+    def resolve_tile_sprite_area_type(cls, grid, tile):
+
+        if tile.type == Tiles.WHITE_TORCH:
+            return cls.Areas.WHITE_TORCH
         else:
-            return get_tile_sprite(0, 0).get_surface()
+            raise AttributeError
+
+    @classmethod
+    def get_sprite(cls, grid, tile, size):
+        area_type = cls.resolve_tile_sprite_area_type(grid, tile)
+        if cls.sprites.get(area_type) is None:
+            cls.create_sprite(tile, area_type)
+        sprite = cls.sprites.get(area_type)
+
+        if sprite.get_width() != size.x or sprite.get_height() != size.y:
+            sprite.scale(size.x / 16)
+
+        return sprite
+
+
+class ItemSpriteResolver:
+    textures = {
+        Tiles.NONE: ["Item_0", [0, 0, 16, 16]],
+        Tiles.DIRT: ["Item_2", [0, 0, 16, 16]],
+        Tiles.STONE: ["Item_3", [0, 0, 16, 16]],
+        Tiles.LEAD: ["Item_11", [0, 0, 16, 16]],
+        Tiles.COPPER: ["Item_12", [0, 0, 16, 16]],
+        Tiles.GOLD: ["Item_13", [0, 0, 16, 16]],
+        Tiles.SILVER: ["Item_14", [0, 0, 16, 16]],
+        Tiles.ASH: ["Item_172", [0, 0, 16, 16]],
+        Items.IRON_PICKAXE: ["Item_1", [0, 0, 32, 32]],
+        Items.IRON_AXE: ["Item_10", [0, 0, 32, 32]],
+        Items.IRON_HAMMER: ["Item_7", [0, 0, 32, 32]],
+        Tiles.B_OAK_LOG: ["Item_9", [0, 0, 22, 24]],
+        Tiles.B_DIRT: ["Item_30", [0, 0, 16, 16]],
+        Tiles.WHITE_TORCH: ["Item_8", [0, 0, 16, 16]]
+    }
+
+    sprites = {}
+
+    @classmethod
+    def create_sprite(cls, item_type):
+        filename, area = cls.textures[item_type]
+        cls.sprites[item_type] = Sprite(filename, (area,), 0)
+
+    @classmethod
+    def get_sprite(cls, item_type):
+        if cls.sprites.get(item_type) is None:
+            cls.create_sprite(item_type)
+        return cls.sprites.get(item_type)
+
+
+class WorldBackgroundResolver:
+    class Textures(Enum):
+        FOREST = ["Forest_background_2", [0, 0, 1024, 838]]
+
+    backgrounds = {}
+
+    @classmethod
+    def create_sprite(cls, texture_enum):
+        filename, area = texture_enum.value
+        cls.backgrounds[texture_enum.name] = Sprite(filename, (area,), 0, alpha=False)
+
+    @classmethod
+    def resolve_background(cls, map_, pos: Vector, t_size: Vector):
+        return cls.Textures.FOREST
+
+    @classmethod
+    def get_sprite(cls, map_, camera, t_size: Vector):
+        pos = camera.pos
+        texture = cls.resolve_background(map_, pos, t_size)
+        if cls.backgrounds.get(texture.name) is None:
+            cls.create_sprite(texture)
+        sprite = cls.backgrounds[texture.name]
+
+        w, h = sprite.get_width(), sprite.get_height()
+        sw, sh = camera.size.x, camera.size.y
+        if h != (sh / h) * 2:
+            sprite.scale((sh / h) * 2)
+
+        return sprite
+
+
+class GradientTile:
+
+    @staticmethod
+    def get_surface(grid, tile, size):
+        col = tile.col
+        row = tile.row
+        top, down, left, right = grid.get_nbs(col, row)
+
+        t_v = abs(top.type) if top else 0
+        d_v = abs(down.type) if down else 0
+        l_v = abs(left.type) if left else 0
+        r_v = abs(right.type) if right else 0
+        return gradient((size.x, size.y),
+                        (0, 0, 0, t_v / 15 * 255),
+                        (0, 0, 0, d_v / 15 * 255),
+                        (0, 0, 0, l_v / 15 * 255),
+                        (0, 0, 0, r_v / 15 * 255),
+                        2)
 
 
 class PygameRenderer:
     class ActorRenderer:
 
-        def __init__(self, camera, actor) -> None:
+        def __init__(self, camera, actor, map_, tile_width: int, tile_height: int) -> None:
             self.camera = camera
             self.actor = actor
-            self.resolver = ActorSpriteResolver(actor)
-            create_sprites_for_actor(camera, actor.type)
+
+            self.map = map_
+            self.tile_width = tile_width
+            self.tile_height = tile_height
+            self.light_surface = Surface([actor.size.x + 10, actor.size.y + 10], SRCALPHA, 32)
 
         def update(self, delta_time: float):
-            sprite = self.resolver.get_sprite()
+            sprite = ActorSpriteResolver.get_sprite(self.actor)
 
             if self.actor.get_state() & ActorState.RIGHT:
                 sprite.flip_right()
@@ -853,26 +784,44 @@ class PygameRenderer:
             vel = 1 / self.actor.vel
             sprite.set_time(abs(vel.x) * 7)
 
+            self.light_surface.fill(Color(255, 255, 255, 0))
+            x, y = self.actor.pos.x, self.actor.pos.y
+            w, h = self.actor.size.x + 5, self.actor.size.y + 5
+
+            s_c, s_r = int(x / self.tile_width), int(y / self.tile_height)
+            e_c, e_r = s_c + int(w / self.tile_width) + 1, s_r + int(h / self.tile_height) + 1
+            size = Vector(self.tile_width, self.tile_height)
+
+            for c in range(s_c, e_c + 1):
+                for r in range(s_r, e_r + 1):
+                    tile = self.map.lighting.get_tile(c, r)
+                    if tile and tile.type != Tiles.NONE:
+                        gradient_surface = GradientTile.get_surface(self.map.lighting, tile, size)
+                        t_x = c * self.tile_width - x
+                        t_y = r * self.tile_height - y
+                        self.light_surface.blit(gradient_surface, [t_x, t_y, w, h], None)
+
         def render(self, delta_time: float):
-            sprite = self.resolver.get_sprite()
-            sprite.render(self.actor.pos - Vector(10, 10), delta_time)
+            sprite = ActorSpriteResolver.get_sprite(self.actor)
+            self.camera.draw_sprite(sprite, self.actor.pos - 10, delta_time)
+            self.camera.draw_surface(self.light_surface, self.actor.pos - 4, None)
 
-            pos = self.actor.pos
-            size = self.actor.size
-            vel = self.actor.vel
-            start = pos + size / 2
+            # pos = self.actor.pos
+            # size = self.actor.size
+            # vel = self.actor.vel
+            # start = pos + size / 2
 
-            if vel.x != 0 or vel.y != 0:
-                self.camera.draw_line(start, start + vel * delta_time, 2, Color(255, 0, 0))
+            # if vel.x != 0 or vel.y != 0:
+            #     self.camera.draw_line(start, start + vel * delta_time, 2, Color(255, 0, 0))
 
             # draw position
-            text_pos0 = pos - Vector(0, size.y + 32)
-            text_pos1 = pos - Vector(0, size.y + 16)
-            text_pos2 = pos - Vector(0, size.y)
-            self.camera.draw_text("[x({}), y({})]".format(pos.x, pos.y), 16, text_pos0, Color(0, 0, 0))
-            self.camera.draw_text("[c({}), r({})]".format(int(pos.x / 16), int(pos.y / 16)), 16, text_pos1,
-                                  Color(0, 0, 0))
-            self.camera.draw_text("[vx({}), vy({})]".format(vel.x, vel.y), 16, text_pos2, Color(0, 0, 0))
+            # text_pos0 = pos - Vector(0, size.y + 32)
+            # text_pos1 = pos - Vector(0, size.y + 16)
+            # text_pos2 = pos - Vector(0, size.y)
+            # self.camera.draw_text("[x({}), y({})]".format(pos.x, pos.y), 16, text_pos0, Color(0, 0, 0))
+            # self.camera.draw_text("[c({}), r({})]".format(int(pos.x / 16), int(pos.y / 16)), 16, text_pos1,
+            #                       Color(0, 0, 0))
+            # self.camera.draw_text("[vx({}), vy({})]".format(vel.x, vel.y), 16, text_pos2, Color(0, 0, 0))
 
     class MapRenderer(GridListener):
         """ Renders map in self contained layering system -> background then foreground """
@@ -903,34 +852,49 @@ class PygameRenderer:
                 y = row * height
                 super().__init__(x, y, width, height)
 
-            async def init_surface(self):
+            def init_surface(self):
                 """ Initialize chunk surface """
 
                 for col in range(self.tiles_x):
                     for row in range(self.tiles_y):
-                        tile = self.get_tile(col, row, GridType.BACKGROUND0)
-                        if tile and tile.type != Tiles.NONE:
-                            self.blit_tile(tile, GridType.BACKGROUND0)
-                        tile = self.get_tile(col, row, GridType.BACKGROUND1)
-                        if tile and tile.type != Tiles.NONE:
-                            self.blit_tile(tile, GridType.BACKGROUND1)
-                        tile = self.get_tile(col, row, GridType.FOREGROUND)
-                        if tile and tile.type != Tiles.NONE:
-                            self.blit_tile(tile, GridType.FOREGROUND)
                         if self.lighting:
+                            tile = self.get_tile(col, row, GridType.LIGHTING)
+                            if tile and tile.type > -15:  # lighting depth
+                                tile = self.get_tile(col, row, GridType.BACKGROUND)
+                                if tile and tile.type != Tiles.NONE:
+                                    self.blit_tile(tile, GridType.BACKGROUND)
+                                tile = self.get_tile(col, row, GridType.FURNITURE)
+                                if tile and tile.type != Tiles.NONE:
+                                    self.blit_tile(tile, GridType.FURNITURE)
+                                tile = self.get_tile(col, row, GridType.FOREGROUND)
+                                if tile and tile.type != Tiles.NONE:
+                                    self.blit_tile(tile, GridType.FOREGROUND)
                             tile = self.get_tile(col, row, GridType.LIGHTING)
                             if tile and tile.type != Tiles.NONE:
                                 self.blit_tile(tile, GridType.LIGHTING)
+                        else:
+                            tile = self.get_tile(col, row, GridType.BACKGROUND)
+                            if tile and tile.type != Tiles.NONE:
+                                self.blit_tile(tile, GridType.BACKGROUND)
+                            tile = self.get_tile(col, row, GridType.FURNITURE)
+                            if tile and tile.type != Tiles.NONE:
+                                self.blit_tile(tile, GridType.FURNITURE)
+                            tile = self.get_tile(col, row, GridType.FOREGROUND)
+                            if tile and tile.type != Tiles.NONE:
+                                self.blit_tile(tile, GridType.FOREGROUND)
+
+                self.initialized = True
+                self.initializing = False
 
             def get_tile(self, col: int, row: int, grid_type: GridType):
 
                 tile_col = col + self.col * self.tiles_x
                 tile_row = row + self.row * self.tiles_y
 
-                if grid_type == GridType.BACKGROUND0:
-                    return self.map.background0.get_tile(tile_col, tile_row)
-                elif grid_type == GridType.BACKGROUND1:
-                    return self.map.background1.get_tile(tile_col, tile_row)
+                if grid_type == GridType.BACKGROUND:
+                    return self.map.background.get_tile(tile_col, tile_row)
+                elif grid_type == GridType.FURNITURE:
+                    return self.map.furniture.get_tile(tile_col, tile_row)
                 elif grid_type == GridType.FOREGROUND:
                     return self.map.foreground.get_tile(tile_col, tile_row)
                 elif grid_type == GridType.LIGHTING:
@@ -941,37 +905,27 @@ class PygameRenderer:
             def blit_tile(self, tile: Tile, grid_type: GridType):
                 """ Blit tile sprite into chunk surface """
 
-                maps = {
-                    GridType.BACKGROUND0: self.map.background0,
-                    GridType.BACKGROUND1: self.map.background1,
-                    GridType.FOREGROUND: self.map.foreground,
-                    GridType.LIGHTING: self.map.lighting
-                }
+                size = Vector(self.tile_width, self.tile_height)
 
-                if grid_type != GridType.LIGHTING:
-                    filename, diffusion_type, sprite_type, areas = _tileset_table[tile.type]
-                    if sprite_type == 0:
-                        sprite = TileSpriteResolver(maps[grid_type], tile)
-                    elif sprite_type == 1:
-                        sprite = TreeSpriteResolver(maps[grid_type], tile)
-                    elif sprite_type == 2:
-                        sprite = BackgroundSpriteResolver(maps[grid_type], tile)
-                    # elif sprite_type == 3:
-                    #     sprite = LightMaskSpriteResolver(maps[grid_type], tile)
-                    elif sprite_type == 5:
-                        sprite = TreeTopSpriteResolver(maps[grid_type], tile)
-                    else:
-                        raise AttributeError
+                if grid_type == GridType.FOREGROUND:
+                    tile_surface = ForegroundSpriteResolver.get_sprite(self.map.foreground, tile, size).get_surface()
+                elif grid_type == GridType.BACKGROUND:
+                    tile_surface = BackgroundSpriteResolver.get_sprite(self.map.background, tile,
+                                                                       size + 16).get_surface()
+                elif grid_type == GridType.LIGHTING:
+                    tile_surface = GradientTile.get_surface(self.map.lighting, tile, size)
+                elif grid_type == GridType.FURNITURE:
+                    tile_surface = FurnitureSpriteResolver.get_sprite(self.map.furniture, tile, size).get_surface()
                 else:
-                    sprite = LightMaskSpriteResolver(maps[grid_type], tile)
+                    raise AttributeError
 
                 # translate map col - row to chunk col - row
                 col = tile.col % self.tiles_x
                 row = tile.row % self.tiles_y
-                x = col * self.tile_width + (self.tile_width / 2 if grid_type != GridType.BACKGROUND0 else 0)
-                y = row * self.tile_height + (self.tile_height / 2 if grid_type != GridType.BACKGROUND0 else 0)
+                x = col * self.tile_width + (self.tile_width / 2 if grid_type != GridType.BACKGROUND else 0)
+                y = row * self.tile_height + (self.tile_height / 2 if grid_type != GridType.BACKGROUND else 0)
 
-                self.surface.blit(sprite.get_surface(), (x, y))
+                self.surface.blit(tile_surface, (x, y))
 
             def blit_empty(self, col, row):
                 # translate map col - row to chunk col - row
@@ -985,12 +939,12 @@ class PygameRenderer:
                 row = row % self.tiles_y
 
                 self.blit_empty(col, row)
-                tile = self.get_tile(col, row, GridType.BACKGROUND0)
+                tile = self.get_tile(col, row, GridType.BACKGROUND)
                 if tile and tile.type != Tiles.NONE:
-                    self.blit_tile(tile, GridType.BACKGROUND0)
-                tile = self.get_tile(col, row, GridType.BACKGROUND1)
+                    self.blit_tile(tile, GridType.BACKGROUND)
+                tile = self.get_tile(col, row, GridType.FURNITURE)
                 if tile and tile.type != Tiles.NONE:
-                    self.blit_tile(tile, GridType.BACKGROUND1)
+                    self.blit_tile(tile, GridType.FURNITURE)
                 tile = self.get_tile(col, row, GridType.FOREGROUND)
                 if tile and tile.type != Tiles.NONE:
                     self.blit_tile(tile, GridType.FOREGROUND)
@@ -1002,21 +956,7 @@ class PygameRenderer:
             def update(self, delta_time: float):
                 if not self.initialized and not self.initializing:
                     self.initializing = True
-
-                    def on_success(result):
-                        self.initialized = True
-                        self.initializing = False
-
-                    def on_error(error):
-                        self.initialized = False
-                        self.initializing = False
-
-                    run_coroutine(
-                        coroutine=self.init_surface(),
-                        on_success=on_success,
-                        on_error=on_error,
-                        priority=20
-                    )
+                    run_in_thread(self.init_surface, tuple(), priority=10)
 
             def render(self, delta_time: float):
                 if self.initialized:
@@ -1052,10 +992,6 @@ class PygameRenderer:
                         lighting_enabled
                     )
 
-            # prepare surfaces for tiles
-            for tile in Tiles:
-                create_sprites_for_tile(camera, tile, tile_width / 16)
-
             self.map.add_map_listener(self)
 
         def get_chunk(self, chunk_col: int, chunk_row: int) -> Chunk:
@@ -1070,9 +1006,15 @@ class PygameRenderer:
 
             return self.get_chunk(chunk_col, chunk_row)
 
-        async def update_light(self, tile: Tile):
+        def update_light(self, tile: Tile, grid_type: GridType):
 
-            destroyed = tile.type == Tiles.NONE
+            if grid_type == GridType.FOREGROUND:
+                destroyed = (tile.type == Tiles.NONE)
+            elif grid_type == GridType.BACKGROUND:
+                destroyed = (tile.type == Tiles.NONE)
+            else:
+                destroyed = (tile.type == Tiles.WHITE_TORCH)
+
             redraw = set()
 
             if destroyed:  # tile removed ( light added )
@@ -1162,14 +1104,12 @@ class PygameRenderer:
                 chunk = self.get_tile_chunk(col, row)
                 chunk.update_tile(col, row)
 
-            b_tile = self.map.background0.get_tile(c, r)
-            if self.lighting_enabled and (b_tile.type == Tiles.NONE or grid_id == GridType.BACKGROUND0):
-                run_coroutine(
-                    coroutine=self.update_light(tile),
-                    on_success=None,
-                    on_error=None,
-                    priority=10
-                )
+            b_tile = self.map.background.get_tile(c, r)
+            if self.lighting_enabled and (
+                    (grid_id == GridType.FOREGROUND and b_tile.type == Tiles.NONE) or
+                    (grid_id != GridType.FOREGROUND)
+            ):
+                run_in_thread(self.update_light, (tile, grid_id), priority=5)
 
         def update(self, delta_time):
             x = self.camera.pos.x
@@ -1246,6 +1186,39 @@ class PygameRenderer:
 
     class WorldRenderer(SceneListener):
 
+        class BackgroundRenderer:
+
+            def __init__(self, camera, scene, t_width: int, t_height: int) -> None:
+                self.camera = camera
+                self.scene = scene
+                self.map = scene.get_map()
+                self.tile_width = t_width
+                self.tile_height = t_height
+                self.chunk_width = 512
+                self.chunk_height = 512
+
+                screen_x, screen_y = self.camera.size.x, self.camera.size.y
+                self.chunks_x = int(screen_x / self.chunk_width) + 1
+                self.chunks_y = int(screen_y / self.chunk_height) + 1
+
+            def update(self, delta_time: float):
+                pass
+
+            def render(self, delta_time: float):
+                t_size = Vector(self.tile_width, self.tile_height)
+                sprite = WorldBackgroundResolver.get_sprite(self.map, self.camera, t_size)
+
+                w, h = sprite.get_width(), sprite.get_height()
+                x, y = self.camera.pos.x, self.camera.pos.y
+                sw, sh = self.camera.size.x, self.camera.size.y
+
+                translated_y = -h * 0.35 - y * 0.5
+                min_y = -0.5 * h
+
+                for _ in range(int(sw / w) + 2):
+                    pos = Vector(_ * w - ((x * 0.25) % w), translated_y if translated_y > min_y else min_y)
+                    self.camera.draw_sprite(sprite, pos, delta_time, translate=False)
+
         class InventoryRenderer:
 
             def __init__(self, camera, inventory, item_width: int, item_height: int, item_spacing: int) -> None:
@@ -1254,12 +1227,6 @@ class PygameRenderer:
                 self.item_width = item_width
                 self.item_height = item_height
                 self.item_spacing = item_spacing
-
-                for item in Items:
-                    create_sprites_for_items(camera, item)
-                for item in Tiles:
-                    if item.value >= 0:
-                        create_sprites_for_items(camera, item)
 
             def update(self, delta_time: float):
                 pass
@@ -1282,11 +1249,11 @@ class PygameRenderer:
                         self.camera.draw_rect((pos, size), Color(0, 0, 255, 64), translate=False)
 
                     if slot.type:
-                        sprite = get_item_sprite(slot.type)
+                        sprite = ItemSpriteResolver.get_sprite(slot.type)
                         item_pos = pos + 0.5 * size - 0.5 * Vector(sprite.get_width(), sprite.get_height())
                         text_pos = pos + 0.5 * size + Vector(0, -2)
                         self.camera.draw_surface(sprite.get_surface(), item_pos, None, translate=False)
-                        self.camera.draw_text(str(slot.amount), 16, text_pos, Color(0, 0, 0), translate=False)
+                        self.camera.draw_text(str(slot.amount), 16, text_pos, Color(255, 255, 255), translate=False)
 
                     pos.x += self.item_width + self.item_spacing
 
@@ -1299,7 +1266,7 @@ class PygameRenderer:
                     size = Vector(self.item_width, self.item_height)
                     for recipe in self.inventory.get_recipes():
                         self.camera.draw_rect((pos, size), Color(0, 0, 255, 160), translate=False)
-                        sprite = get_item_sprite(recipe.get_type())
+                        sprite = ItemSpriteResolver.get_sprite(recipe.get_type())
                         item_pos = pos + 0.5 * size - 0.5 * Vector(sprite.get_width(), sprite.get_height())
                         self.camera.draw_surface(sprite.get_surface(), item_pos, None, translate=False)
                         pos.y += self.item_height + self.item_spacing
@@ -1308,11 +1275,11 @@ class PygameRenderer:
                 if not self.inventory.temp.is_empty():
                     slot = self.inventory.temp
                     pos = Vector(*pygame.mouse.get_pos())
-                    sprite = get_item_sprite(slot.type)
+                    sprite = ItemSpriteResolver.get_sprite(slot.type)
                     item_pos = pos + 0.5 * size - 0.5 * Vector(sprite.get_width(), sprite.get_height())
                     text_pos = pos + 0.5 * size + Vector(0, -2)
                     self.camera.draw_surface(sprite.get_surface(), item_pos, None, translate=False)
-                    self.camera.draw_text(str(slot.amount), 16, text_pos, Color(0, 0, 0),
+                    self.camera.draw_text(str(slot.amount), 16, text_pos, Color(255, 255, 255),
                                           translate=False)
 
         def __init__(self, scene, width: int, height: int) -> None:
@@ -1332,13 +1299,17 @@ class PygameRenderer:
 
             lighting = settings.is_lighting_enabled()
 
+            self.background_renderer = PygameRenderer.WorldRenderer.BackgroundRenderer(self.camera, scene,
+                                                                                       tile_width, tile_height)
+
             self.map_renderer = PygameRenderer.MapRenderer(self.camera, scene.get_map(), tile_width, tile_height,
                                                            chunk_width, chunk_height, lighting)
             self.inv_renderer = PygameRenderer.WorldRenderer.InventoryRenderer(
                 self.camera, scene.inventory, inv_item_width, inv_item_height, inv_item_spacing)
 
             for actor in scene.get_actors():
-                self.actor_renderers[str(actor)] = PygameRenderer.ActorRenderer(self.camera, actor)
+                self.actor_renderers[str(actor)] = PygameRenderer.ActorRenderer(self.camera, actor, scene.get_map(),
+                                                                                tile_width, tile_height)
 
         def on_actor_added(self, actor):
             self.actor_renderers[str(actor)] = PygameRenderer.ActorRenderer(self.camera, actor)
@@ -1351,6 +1322,7 @@ class PygameRenderer:
 
         def update(self, delta_time: float):
             """ Update actors and map """
+            self.background_renderer.update(delta_time)
             self.map_renderer.update(delta_time)
             for actor_renderer in self.actor_renderers.values():
                 actor_renderer.update(delta_time)
@@ -1359,7 +1331,7 @@ class PygameRenderer:
 
         def render(self, delta_time: float):
             """ Renders actors and map """
-            self.camera.draw_rect((self.camera.pos, self.camera.size), Color(135, 206, 235))
+            self.background_renderer.render(delta_time)
             self.map_renderer.render(delta_time)
             for actor_renderer in self.actor_renderers.values():
                 actor_renderer.render(delta_time)
