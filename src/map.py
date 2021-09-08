@@ -1,13 +1,12 @@
+import numpy
 from abc import abstractmethod, ABC
 from enum import IntEnum
 from typing import Union, List
 
-import numpy
-
 
 class GridType(IntEnum):
-    BACKGROUND0 = 0
-    BACKGROUND1 = 1
+    BACKGROUND = 0
+    FURNITURE = 1
     FOREGROUND = 2
     LIGHTING = 3
 
@@ -92,16 +91,16 @@ class Map(ABC):
     """ Implementation of map with layer switching, tiles are represented by int """
 
     foreground: Grid
-    background0: Grid
-    background1: Grid
+    background: Grid
+    furniture: Grid
     lighting: Grid
 
     def __init__(self, width: int, height: int) -> None:
         self.width = width
         self.height = height
         self.foreground = Grid(GridType.FOREGROUND, width, height)
-        self.background0 = Grid(GridType.BACKGROUND0, width, height)
-        self.background1 = Grid(GridType.BACKGROUND1, width, height)
+        self.background = Grid(GridType.BACKGROUND, width, height)
+        self.furniture = Grid(GridType.FURNITURE, width, height)
         self.lighting = Grid(GridType.LIGHTING, width, height)
 
     @abstractmethod
@@ -114,10 +113,10 @@ class Map(ABC):
 
     def add_map_listener(self, listener):
         self.foreground.add_listener(listener)
-        self.background0.add_listener(listener)
-        self.background1.add_listener(listener)
+        self.background.add_listener(listener)
+        self.furniture.add_listener(listener)
 
     def remove_map_listener(self, listener):
         self.foreground.remove_listener(listener)
-        self.background0.remove_listener(listener)
-        self.background1.remove_listener(listener)
+        self.background.remove_listener(listener)
+        self.furniture.remove_listener(listener)
